@@ -455,7 +455,7 @@ export default function SettingsModal({ open, onOpenChange }) {
                     <Button
                       onClick={handleSaveTenant}
                       className="bg-blue-600 hover:bg-blue-700 text-white"
-                      disabled={!tenantForm.name || !tenantForm.environment_id}
+                      disabled={!tenantForm.name || !tenantForm.environment_id || !tenantForm.port}
                       data-testid="save-tenant-btn"
                     >
                       <Check className="w-4 h-4 mr-2" />
