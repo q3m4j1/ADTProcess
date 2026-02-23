@@ -432,8 +432,8 @@ export default function SettingsModal({ open, onOpenChange }) {
                       <Label className="text-slate-700">Port</Label>
                       <Input
                         type="number"
-                        value={tenantForm.port}
-                        onChange={(e) => setTenantForm({ ...tenantForm, port: parseInt(e.target.value) || 18443 })}
+                        value={tenantForm.port || ''}
+                        onChange={(e) => setTenantForm({ ...tenantForm, port: e.target.value === '' ? '' : parseInt(e.target.value) })}
                         placeholder="18443"
                         className="mt-1"
                         data-testid="tenant-port-input"
