@@ -1,34 +1,159 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* MsgRouter Platform Styles */
+
+/* Sidebar styles */
+.sidebar {
+    @apply fixed left-0 top-0 h-full w-16 bg-white border-r border-slate-200 flex flex-col items-center py-4 z-40;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.sidebar-expanded {
+    @apply w-64;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+/* Main content area */
+.main-content {
+    @apply ml-16 min-h-screen bg-slate-50;
 }
 
-.App-link {
-    color: #61dafb;
+.main-content-expanded {
+    @apply ml-64;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+/* Hero gradient */
+.hero-gradient {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #1e40af 100%);
+}
+
+/* Stat card colors */
+.stat-card-blue {
+    @apply bg-blue-50 border-blue-100;
+}
+
+.stat-card-green {
+    @apply bg-emerald-50 border-emerald-100;
+}
+
+.stat-card-purple {
+    @apply bg-violet-50 border-violet-100;
+}
+
+.stat-card-amber {
+    @apply bg-amber-50 border-amber-100;
+}
+
+.stat-card-red {
+    @apply bg-red-50 border-red-100;
+}
+
+/* Color picker dots */
+.color-dot {
+    @apply w-8 h-8 rounded-full cursor-pointer transition-transform duration-150;
+}
+
+.color-dot:hover {
+    @apply scale-110;
+}
+
+.color-dot.selected {
+    @apply ring-2 ring-offset-2 ring-slate-400;
+}
+
+/* Wizard stepper */
+.wizard-step {
+    @apply flex items-center;
+}
+
+.wizard-step-circle {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors duration-200;
+}
+
+.wizard-step-circle.active {
+    @apply bg-blue-600 text-white;
+}
+
+.wizard-step-circle.completed {
+    @apply bg-emerald-500 text-white;
+}
+
+.wizard-step-circle.pending {
+    @apply bg-slate-200 text-slate-500;
+}
+
+.wizard-step-line {
+    @apply h-0.5 w-16 mx-2;
+}
+
+.wizard-step-line.active {
+    @apply bg-emerald-500;
+}
+
+.wizard-step-line.pending {
+    @apply bg-slate-200;
+}
+
+/* Environment color indicator */
+.env-color-indicator {
+    @apply w-3 h-3 rounded-full inline-block mr-2;
+}
+
+/* Template code preview */
+.template-preview {
+    @apply font-mono text-sm bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.template-preview .placeholder-highlight {
+    @apply bg-amber-500/40 text-amber-300 px-0.5 rounded;
+}
+
+/* Placeholder buttons */
+.placeholder-btn {
+    @apply inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer;
+}
+
+/* Status badges */
+.status-sent {
+    @apply bg-emerald-100 text-emerald-700;
+}
+
+.status-failed {
+    @apply bg-red-100 text-red-700;
+}
+
+.status-pending {
+    @apply bg-amber-100 text-amber-700;
+}
+
+/* Table row hover */
+.table-row-hover {
+    @apply hover:bg-slate-50/80 transition-colors;
+}
+
+/* Modal overlay */
+.modal-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-50;
+}
+
+/* Form input focus */
+.input-focus {
+    @apply focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none;
+}
+
+/* Navigation item */
+.nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors;
+}
+
+.nav-item.active {
+    @apply bg-blue-50 text-blue-700 border-r-2 border-blue-600;
+}
+
+/* Quick overview card */
+.overview-card {
+    @apply bg-white rounded-lg border border-slate-200 p-4 hover:shadow-sm transition-shadow;
+}
+
+/* Audit trail status */
+.audit-status {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
 }
