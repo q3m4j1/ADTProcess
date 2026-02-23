@@ -1,0 +1,208 @@
+{
+  "identity": {
+    "name": "E1: The Anti-AI Designer",
+    "persona": "The Clinical Modernist",
+    "tone": "Authoritative, Precise, Clean, Trusted",
+    "vibe": "Swiss Style meets Medical Data",
+    "archetype": "The Performance Pro (Healthcare Variant)"
+  },
+  "typography": {
+    "primary_font": "Inter",
+    "heading_font": "Manrope",
+    "mono_font": "JetBrains Mono",
+    "scale": {
+      "h1": "text-4xl font-bold tracking-tight text-slate-900",
+      "h2": "text-3xl font-semibold tracking-tight text-slate-900",
+      "h3": "text-2xl font-semibold tracking-tight text-slate-900",
+      "h4": "text-xl font-medium text-slate-900",
+      "body": "text-base text-slate-600 leading-relaxed",
+      "small": "text-sm text-slate-500",
+      "caption": "text-xs text-slate-400 uppercase tracking-wider font-medium"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#2563EB",
+        "foreground": "#FFFFFF",
+        "hover": "#1D4ED8",
+        "active": "#1E40AF"
+      },
+      "secondary": {
+        "DEFAULT": "#F1F5F9",
+        "foreground": "#0F172A",
+        "hover": "#E2E8F0"
+      },
+      "accent": {
+        "DEFAULT": "#F8FAFC",
+        "foreground": "#0F172A"
+      },
+      "destructive": {
+        "DEFAULT": "#EF4444",
+        "foreground": "#FFFFFF"
+      },
+      "success": {
+        "DEFAULT": "#10B981",
+        "foreground": "#FFFFFF",
+        "bg": "#ECFDF5",
+        "text": "#047857"
+      },
+      "warning": {
+        "DEFAULT": "#F59E0B",
+        "foreground": "#FFFFFF",
+        "bg": "#FFFBEB",
+        "text": "#B45309"
+      },
+      "info": {
+        "DEFAULT": "#3B82F6",
+        "bg": "#EFF6FF",
+        "text": "#1D4ED8"
+      },
+      "background": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "border": "#E2E8F0",
+      "input": "#E2E8F0",
+      "ring": "#2563EB"
+    },
+    "gradients": {
+      "hero": "bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900",
+      "subtle": "bg-gradient-to-b from-white to-slate-50",
+      "active_nav": "bg-blue-50 text-blue-700 border-r-2 border-blue-600"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "section_gap": "gap-8",
+      "card_padding": "p-6",
+      "grid_gap": "gap-6"
+    },
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+      "settings": "grid grid-cols-12 gap-8",
+      "wizard": "max-w-4xl mx-auto"
+    },
+    "border_radius": {
+      "card": "rounded-xl",
+      "button": "rounded-lg",
+      "input": "rounded-md"
+    },
+    "shadows": {
+      "card": "shadow-sm hover:shadow-md transition-shadow duration-200",
+      "dropdown": "shadow-lg border border-slate-100",
+      "modal": "shadow-2xl"
+    }
+  },
+  "components": {
+    "Button": {
+      "default": "bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors",
+      "outline": "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-4 py-2 rounded-lg transition-colors",
+      "ghost": "hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-medium px-4 py-2 rounded-lg transition-colors",
+      "destructive": "bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+    },
+    "Card": {
+      "container": "bg-white border border-slate-200 rounded-xl shadow-sm p-6 overflow-hidden relative",
+      "header": "flex items-center justify-between mb-4",
+      "title": "text-lg font-semibold text-slate-900",
+      "content": "text-sm text-slate-600"
+    },
+    "Input": {
+      "base": "flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 transition-all",
+      "label": "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block text-slate-700"
+    },
+    "Badge": {
+      "base": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "default": "border-transparent bg-blue-100 text-blue-700 hover:bg-blue-200",
+      "secondary": "border-transparent bg-slate-100 text-slate-700 hover:bg-slate-200",
+      "destructive": "border-transparent bg-red-100 text-red-700 hover:bg-red-200",
+      "outline": "text-slate-900 border-slate-200"
+    },
+    "Table": {
+      "container": "w-full overflow-auto rounded-lg border border-slate-200",
+      "header": "bg-slate-50 text-slate-500 text-xs uppercase font-medium border-b border-slate-200",
+      "row": "border-b border-slate-100 hover:bg-slate-50/50 transition-colors",
+      "cell": "p-4 text-sm text-slate-600 align-middle"
+    },
+    "Tabs": {
+      "list": "inline-flex h-10 items-center justify-center rounded-md bg-slate-100 p-1 text-slate-500",
+      "trigger": "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm",
+      "content": "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "bg-white/80 backdrop-blur-md border border-white/20 shadow-lg",
+    "subtle_gradient": "bg-gradient-to-br from-slate-50 to-slate-100/50",
+    "noise_texture": "before:absolute before:inset-0 before:bg-[url('/noise.png')] before:opacity-[0.03] before:pointer-events-none",
+    "focus_ring": "ring-2 ring-blue-500 ring-offset-2"
+  },
+  "motion": {
+    "page_transition": {
+      "initial": { "opacity": 0, "y": 10 },
+      "animate": { "opacity": 1, "y": 0 },
+      "exit": { "opacity": 0, "y": -10 },
+      "transition": { "duration": 0.3, "ease": "easeOut" }
+    },
+    "hover_lift": "hover:-translate-y-1 hover:shadow-md transition-all duration-200",
+    "button_click": "active:scale-95 transition-transform duration-100"
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width: 1.5px; size: 20px"
+    },
+    "images": {
+      "login_bg": "https://images.unsplash.com/photo-1676200832719-35b267832b04?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "empty_state": "https://images.unsplash.com/photo-1584715787854-9922db91c681?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "success_illustration": "https://images.pexels.com/photos/6203473/pexels-photo-6203473.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    }
+  },
+  "feature_specifics": {
+    "dashboard": {
+      "layout": "Bento Grid",
+      "key_elements": ["Stats Cards (Env, Tenants, Msgs)", "Activity Feed (Audit Trail)", "Quick Actions", "System Health"]
+    },
+    "settings": {
+      "layout": "Vertical Tabs with Content Panel",
+      "tabs": ["Environments", "Tenants", "Templates", "Users"],
+      "interaction": "Modal or Slide-over for Create/Edit actions"
+    },
+    "wizard": {
+      "layout": "Horizontal Stepper",
+      "steps": ["Select Scope", "Input Data", "Review & Send"],
+      "validation": "Real-time Zod validation"
+    },
+    "code_editor": {
+      "theme": "vs-dark",
+      "font": "JetBrains Mono",
+      "line_numbers": true
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use 'lucide-react' for all icons.",
+    "Use 'recharts' for the message volume chart on the dashboard.",
+    "Use 'react-hook-form' and 'zod' for all forms.",
+    "Use 'sonner' for toast notifications.",
+    "Implement 'framer-motion' for subtle page transitions and list item entrances.",
+    "Ensure all interactive elements have 'data-testid' attributes.",
+    "Use the provided image URLs for the login page background and empty states.",
+    "For the HL7 message preview, use a monospace font and preserve whitespace.",
+    "Maintain a strict 'Clean Blue' theme. Avoid gradients for backgrounds unless specified.",
+    "Do NOT use 'alert()' or default browser confirms. Use Shadcn Dialogs.",
+    "Ensure the sidebar is collapsible on mobile.",
+    "Use 'date-fns' for date formatting in the Audit Trail."
+  ],
+  "universal_guidelines": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for overlays only.",
+    "You MUST NOT apply universal transition. Eg: 'transition: all'. This results in breaking transforms.",
+    "You MUST NOT center align the app container. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations.",
+    "NEVER: use AI assistant Emoji characters like 🤖 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures and noise overlays separate good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories = main agent will use placeholder text which is FORBIDDEN"
+  ]
+}
