@@ -551,12 +551,12 @@ export default function SettingsModal({ open, onOpenChange }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-slate-700">Filter by Environment</Label>
-                    <Select value={filterEnvId} onValueChange={(v) => { setFilterEnvId(v); setFilterTenantId(''); }}>
+                    <Select value={filterEnvId || "all"} onValueChange={(v) => { setFilterEnvId(v === "all" ? "" : v); setFilterTenantId(''); }}>
                       <SelectTrigger className="mt-1" data-testid="filter-env-select">
                         <SelectValue placeholder="All environments" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All environments</SelectItem>
+                        <SelectItem value="all">All environments</SelectItem>
                         {environments.map((env) => (
                           <SelectItem key={env.id} value={env.id}>
                             <div className="flex items-center gap-2">
@@ -570,12 +570,12 @@ export default function SettingsModal({ open, onOpenChange }) {
                   </div>
                   <div>
                     <Label className="text-slate-700">Filter by Tenant</Label>
-                    <Select value={filterTenantId} onValueChange={setFilterTenantId}>
+                    <Select value={filterTenantId || "all"} onValueChange={(v) => setFilterTenantId(v === "all" ? "" : v)}>
                       <SelectTrigger className="mt-1" data-testid="filter-tenant-select">
                         <SelectValue placeholder="All tenants" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All tenants</SelectItem>
+                        <SelectItem value="all">All tenants</SelectItem>
                         {filteredTenants.map((tenant) => (
                           <SelectItem key={tenant.id} value={tenant.id}>
                             {tenant.name}
