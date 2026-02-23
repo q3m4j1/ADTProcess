@@ -15,6 +15,14 @@ import {
 } from '../components/ui/select';
 import { ScrollArea } from '../components/ui/scroll-area';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import {
   Activity,
   Server,
   Building2,
@@ -27,8 +35,13 @@ import {
   Search,
   Settings,
   BarChart3,
+  RefreshCw,
+  Eye,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 import {
   AreaChart,
   Area,
