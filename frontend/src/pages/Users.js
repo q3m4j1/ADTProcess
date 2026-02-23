@@ -330,18 +330,8 @@ export default function UsersPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      User (Send messages only)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="admin">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4" />
-                      Admin (Full access)
-                    </div>
-                  </SelectItem>
+                  <SelectItem value="user">User (Send messages only)</SelectItem>
+                  <SelectItem value="admin">Admin (Full access)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
