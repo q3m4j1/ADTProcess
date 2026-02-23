@@ -71,6 +71,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [expandedRows, setExpandedRows] = useState({});
+  const [reprocessing, setReprocessing] = useState({});
+  const [viewMessageDialog, setViewMessageDialog] = useState(null);
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
 
