@@ -511,6 +511,86 @@ async def get_audit_logs(
     logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return [AuditLogResponse(**log) for log in logs]
 
+@api_router.post("/audit-logs/{audit_id}/reprocess")
+async def reprocess_message(audit_id: str, current_user: dict = Depends(get_current_user)):
+    """Reprocess/retry a previously sent message"""
+    
+    # Get the original audit log
+    original_log = await db.audit_logs.find_one({"id": audit_id}, {"_id": 0})
+    if not original_log:
+        raise HTTPException(status_code=404, detail="Audit log not found")
+    
+    # Get target URL from original log
+    target_url = original_log.get("target_url")
+    if not target_url:
+        raise HTTPException(status_code=400, detail="Original message has no target URL")
+    
+    # Get the original message
+    original_message = original_log.get("message_sent")
+    if not original_message:
+        raise HTTPException(status_code=400, detail="Original message content not found")
+    
+    # Update timestamps and message ID in the message
+    final_message = original_message
+    # Replace old timestamp with new one if present
+    import re
+    timestamp_pattern = r'\d{14}'
+    new_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    final_message = re.sub(timestamp_pattern, new_timestamp, final_message, count=1)
+    
+    # Create new audit log for the reprocess
+    audit_log = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["user_id"],
+        "user_email": current_user["email"],
+        "environment_name": original_log["environment_name"],
+        "tenant_name": original_log["tenant_name"],
+        "template_name": original_log["template_name"],
+        "mrn": original_log["mrn"],
+        "visit_number": original_log["visit_number"],
+        "message_sent": final_message,
+        "target_url": target_url,
+        "status": "pending",
+        "response_code": None,
+        "response_body": None,
+        "original_audit_id": audit_id,  # Reference to original message
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Attempt to send the message via HTTP
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as http_client:
+            response = await http_client.post(
+                target_url,
+                content=final_message,
+                headers={"Content-Type": "text/plain"}
+            )
+            audit_log["status"] = "sent" if response.status_code < 400 else "failed"
+            audit_log["response_code"] = response.status_code
+            audit_log["response_body"] = response.text[:500] if response.text else None
+    except httpx.TimeoutException:
+        audit_log["status"] = "failed"
+        audit_log["response_body"] = "Connection timeout"
+    except httpx.ConnectError as e:
+        audit_log["status"] = "failed"
+        audit_log["response_body"] = f"Connection error: {str(e)[:200]}"
+    except Exception as e:
+        audit_log["status"] = "failed"
+        audit_log["response_body"] = f"Error: {str(e)[:200]}"
+    
+    # Save new audit log
+    await db.audit_logs.insert_one(audit_log)
+    
+    return {
+        "status": audit_log["status"],
+        "message": final_message,
+        "target_url": target_url,
+        "response_code": audit_log["response_code"],
+        "response_body": audit_log["response_body"],
+        "audit_id": audit_log["id"],
+        "original_audit_id": audit_id
+    }
+
 # ==================== DASHBOARD STATS ====================
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
