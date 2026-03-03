@@ -169,6 +169,33 @@ export default function Dashboard() {
     return matchesSearch && matchesStatus;
   });
 
+  const toggleRowExpand = (logId) => {
+    setExpandedRows((prev) => ({ ...prev, [logId]: !prev[logId] }));
+  };
+
+  const handleReprocess = async (logId) => {
+    setReprocessing((prev) => ({ ...prev, [logId]: true }));
+    try {
+      const response = await axios.post(`${API}/audit-logs/${logId}/reprocess`);
+      if (response.data.status === 'sent') {
+        toast.success('Message reprocessed successfully!');
+      } else {
+        toast.error(`Reprocess failed: ${response.data.response_body || 'Unknown error'}`);
+      }
+      // Refresh audit logs and stats
+      const [statsRes, logsRes] = await Promise.all([
+        axios.get(`${API}/dashboard/stats`),
+        axios.get(`${API}/audit-logs?limit=100`),
+      ]);
+      setStats(statsRes.data);
+      setAuditLogs(logsRes.data);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to reprocess message');
+    } finally {
+      setReprocessing((prev) => ({ ...prev, [logId]: false }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -543,6 +570,7 @@ export default function Dashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="w-10 p-3"></th>
                     <th className="text-left p-3 text-xs font-semibold text-slate-500 uppercase">
                       Timestamp
                     </th>
@@ -559,49 +587,118 @@ export default function Dashboard() {
                       MRN
                     </th>
                     <th className="text-left p-3 text-xs font-semibold text-slate-500 uppercase">
-                      Visit #
+                      Status
                     </th>
                     <th className="text-left p-3 text-xs font-semibold text-slate-500 uppercase">
-                      Status
+                      Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLogs.slice(0, 50).map((log) => (
-                    <tr
-                      key={log.id}
-                      className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
-                      data-testid={`audit-row-${log.id}`}
-                    >
-                      <td className="p-3 text-sm text-slate-600">
-                        {format(new Date(log.created_at), 'MMM dd, yyyy, hh:mm:ss a')}
-                      </td>
-                      <td className="p-3 text-sm font-medium text-slate-900">
-                        {log.environment_name}
-                      </td>
-                      <td className="p-3 text-sm text-slate-600">{log.tenant_name}</td>
-                      <td className="p-3 text-sm text-slate-600">{log.template_name}</td>
-                      <td className="p-3 text-sm font-mono text-slate-600">{log.mrn}</td>
-                      <td className="p-3 text-sm font-mono text-slate-600">{log.visit_number}</td>
-                      <td className="p-3">
-                        <Badge
-                          className={
-                            log.status === 'sent' ? 'status-sent' : 'status-failed'
-                          }
-                        >
-                          {log.status === 'sent' ? (
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                          ) : (
-                            <XCircle className="w-3 h-3 mr-1" />
-                          )}
-                          {log.status === 'sent' ? 'Sent' : 'Failed'}
-                        </Badge>
-                      </td>
-                    </tr>
+                    <>
+                      <tr
+                        key={log.id}
+                        className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+                        data-testid={`audit-row-${log.id}`}
+                      >
+                        <td className="p-3">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => toggleRowExpand(log.id)}
+                            data-testid={`expand-row-${log.id}`}
+                          >
+                            {expandedRows[log.id] ? (
+                              <ChevronUp className="w-4 h-4 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-slate-400" />
+                            )}
+                          </Button>
+                        </td>
+                        <td className="p-3 text-sm text-slate-600">
+                          {format(new Date(log.created_at), 'MMM dd, yyyy, hh:mm:ss a')}
+                        </td>
+                        <td className="p-3 text-sm font-medium text-slate-900">
+                          {log.environment_name}
+                        </td>
+                        <td className="p-3 text-sm text-slate-600">{log.tenant_name}</td>
+                        <td className="p-3 text-sm text-slate-600">{log.template_name}</td>
+                        <td className="p-3 text-sm font-mono text-slate-600">{log.mrn}</td>
+                        <td className="p-3">
+                          <Badge
+                            className={
+                              log.status === 'sent' ? 'status-sent' : 'status-failed'
+                            }
+                          >
+                            {log.status === 'sent' ? (
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                            ) : (
+                              <XCircle className="w-3 h-3 mr-1" />
+                            )}
+                            {log.status === 'sent' ? 'Sent' : 'Failed'}
+                          </Badge>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => setViewMessageDialog(log)}
+                              data-testid={`view-message-${log.id}`}
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => handleReprocess(log.id)}
+                              disabled={reprocessing[log.id]}
+                              data-testid={`reprocess-${log.id}`}
+                            >
+                              {reprocessing[log.id] ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600 mr-1" />
+                              ) : (
+                                <RefreshCw className="w-4 h-4 mr-1" />
+                              )}
+                              Reprocess
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedRows[log.id] && (
+                        <tr key={`${log.id}-details`} className="bg-slate-50">
+                          <td colSpan={8} className="p-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-xs font-semibold text-slate-500 mb-1">Visit Number</p>
+                                <p className="text-sm font-mono text-slate-700">{log.visit_number}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-500 mb-1">Response Code</p>
+                                <p className="text-sm font-mono text-slate-700">{log.response_code || 'N/A'}</p>
+                              </div>
+                              {log.response_body && (
+                                <div className="col-span-2">
+                                  <p className="text-xs font-semibold text-slate-500 mb-1">Response</p>
+                                  <p className="text-sm text-slate-700 bg-white p-2 rounded border border-slate-200">
+                                    {log.response_body}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                   {filteredLogs.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-500">
+                      <td colSpan={8} className="p-8 text-center text-slate-500">
                         No audit logs found
                       </td>
                     </tr>
@@ -612,6 +709,66 @@ export default function Dashboard() {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {/* View Message Dialog */}
+      <Dialog open={!!viewMessageDialog} onOpenChange={() => setViewMessageDialog(null)}>
+        <DialogContent className="max-w-3xl" data-testid="view-message-dialog">
+          <DialogHeader>
+            <DialogTitle>Message Details</DialogTitle>
+            <DialogDescription>
+              {viewMessageDialog?.template_name} - {viewMessageDialog?.environment_name} / {viewMessageDialog?.tenant_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">MRN</p>
+                <p className="font-mono font-medium">{viewMessageDialog?.mrn}</p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">Visit Number</p>
+                <p className="font-mono font-medium">{viewMessageDialog?.visit_number}</p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">Status</p>
+                <Badge className={viewMessageDialog?.status === 'sent' ? 'status-sent' : 'status-failed'}>
+                  {viewMessageDialog?.status === 'sent' ? 'Sent' : 'Failed'}
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-2">Message Content</p>
+              <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap">
+                {viewMessageDialog?.message_sent}
+              </pre>
+            </div>
+            {viewMessageDialog?.response_body && (
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-2">Response ({viewMessageDialog?.response_code || 'N/A'})</p>
+                <div className="bg-slate-100 p-3 rounded-lg text-sm">
+                  {viewMessageDialog?.response_body}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewMessageDialog(null)}>
+              Close
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => {
+                handleReprocess(viewMessageDialog.id);
+                setViewMessageDialog(null);
+              }}
+              data-testid="reprocess-from-dialog"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Reprocess Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
