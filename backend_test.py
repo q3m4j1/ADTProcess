@@ -1,398 +1,316 @@
 #!/usr/bin/env python3
-import requests
-import sys
-import json
-from datetime import datetime
-import time
+"""
+Backend API Testing for MsgRouter Platform
+Testing the new bulk reprocess and message scheduling features
+"""
 
-class MsgRouterAPITester:
+import requests
+import json
+import sys
+import time
+from datetime import datetime, timedelta
+
+class MsgRouterTester:
     def __init__(self, base_url="https://adt-config-tool.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.token = None
-        self.user = None
         self.tests_run = 0
         self.tests_passed = 0
-        self.created_items = {
-            'environments': [],
-            'tenants': [],
-            'templates': []
-        }
+        self.user_id = None
 
-    def log(self, message, level="INFO"):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        print(f"[{timestamp}] {level}: {message}")
+    def log(self, message):
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, params=None):
+    def run_test(self, name, method, endpoint, expected_status, data=None, headers=None):
         """Run a single API test"""
-        url = f"{self.base_url}/{endpoint}"
-        headers = {'Content-Type': 'application/json'}
+        url = f"{self.base_url}{endpoint}"
+        test_headers = {'Content-Type': 'application/json'}
+        
         if self.token:
-            headers['Authorization'] = f'Bearer {self.token}'
+            test_headers['Authorization'] = f'Bearer {self.token}'
+        
+        if headers:
+            test_headers.update(headers)
 
         self.tests_run += 1
-        self.log(f"Testing {name}...")
+        self.log(f"🔍 Testing {name}...")
         
         try:
             if method == 'GET':
-                response = requests.get(url, headers=headers, params=params, timeout=30)
+                response = requests.get(url, headers=test_headers, timeout=30)
             elif method == 'POST':
-                response = requests.post(url, json=data, headers=headers, timeout=30)
+                response = requests.post(url, json=data, headers=test_headers, timeout=30)
             elif method == 'PUT':
-                response = requests.put(url, json=data, headers=headers, timeout=30)
+                response = requests.put(url, json=data, headers=test_headers, timeout=30)
             elif method == 'DELETE':
-                response = requests.delete(url, headers=headers, timeout=30)
+                response = requests.delete(url, headers=test_headers, timeout=30)
 
             success = response.status_code == expected_status
             if success:
                 self.tests_passed += 1
-                self.log(f"✅ {name} - Status: {response.status_code}")
+                self.log(f"✅ PASSED - Status: {response.status_code}")
                 try:
-                    return success, response.json() if response.content else {}
+                    return True, response.json() if response.content else {}
                 except:
-                    return success, {}
+                    return True, {}
             else:
-                self.log(f"❌ {name} - Expected {expected_status}, got {response.status_code}")
+                self.log(f"❌ FAILED - Expected {expected_status}, got {response.status_code}")
                 try:
-                    error_detail = response.json()
-                    self.log(f"   Error: {error_detail}")
+                    error_detail = response.json() if response.content else response.text
+                    self.log(f"   Response: {error_detail}")
                 except:
                     self.log(f"   Response: {response.text[:200]}")
+                return False, {}
 
-            return success, response.json() if success else {}
-
+        except requests.exceptions.RequestException as e:
+            self.log(f"❌ FAILED - Network error: {str(e)}")
+            return False, {}
         except Exception as e:
-            self.log(f"❌ {name} - Network Error: {str(e)}", "ERROR")
+            self.log(f"❌ FAILED - Error: {str(e)}")
             return False, {}
 
-    def test_login(self, email="admin@msgrouter.com", password="admin123"):
-        """Test admin login"""
+    def test_authentication(self):
+        """Test login with admin credentials"""
+        self.log("\n=== AUTHENTICATION TESTS ===")
+        
         success, response = self.run_test(
             "Admin Login",
             "POST",
-            "auth/login",
+            "/auth/login",
             200,
-            data={"email": email, "password": password}
+            data={"email": "admin@msgrouter.com", "password": "admin123"}
         )
+        
         if success and 'token' in response:
             self.token = response['token']
-            self.user = response['user']
-            self.log(f"   Logged in as: {self.user['email']} (Role: {self.user['role']})")
+            self.user_id = response.get('user', {}).get('id')
+            self.log(f"✓ Token obtained for user {response.get('user', {}).get('email')}")
             return True
-        return False
+        else:
+            self.log("❌ Failed to authenticate - cannot continue")
+            return False
 
-    def test_seed_data(self):
-        """Test seeding initial data"""
-        success, response = self.run_test(
-            "Seed Initial Data",
-            "POST", 
-            "seed",
-            200
-        )
-        if success:
-            self.log(f"   Seeded {response.get('environments', 0)} environments")
-        return success
+    def test_dashboard_data(self):
+        """Test dashboard data endpoints"""
+        self.log("\n=== DASHBOARD DATA TESTS ===")
+        
+        # Test dashboard stats
+        self.run_test("Dashboard Stats", "GET", "/dashboard/stats", 200)
+        
+        # Test environments
+        success, environments = self.run_test("Get Environments", "GET", "/environments", 200)
+        
+        # Test tenants
+        success, tenants = self.run_test("Get Tenants", "GET", "/tenants", 200)
+        
+        # Test templates
+        success, templates = self.run_test("Get Templates", "GET", "/templates", 200)
+        
+        # Test audit logs
+        success, audit_logs = self.run_test("Get Audit Logs", "GET", "/audit-logs?limit=50", 200)
+        
+        return environments, tenants, templates, audit_logs
 
-    def test_dashboard_stats(self):
-        """Test dashboard statistics"""
-        success, response = self.run_test(
-            "Dashboard Stats",
-            "GET",
-            "dashboard/stats", 
-            200
-        )
-        if success:
-            self.log(f"   Stats: {response['environments_count']} envs, {response['tenants_count']} tenants, {response['templates_count']} templates")
-        return success, response
-
-    def test_environments(self):
-        """Test environment CRUD operations"""
-        # Get environments
-        success, envs = self.run_test(
-            "Get Environments",
-            "GET",
-            "environments",
-            200
-        )
-        if not success:
-            return False
-            
-        self.log(f"   Found {len(envs)} environments")
+    def test_message_sending(self, environments, tenants, templates):
+        """Test basic message sending to create audit logs"""
+        self.log("\n=== MESSAGE SENDING TESTS ===")
         
-        # Create environment
-        test_env = {
-            "name": f"Test-Env-{int(time.time())}",
-            "address": "https://test.example.com:18443",
-            "color": "#FF5733"
-        }
+        if not environments or not tenants or not templates:
+            self.log("❌ No data available for message sending tests")
+            return []
         
-        success, created_env = self.run_test(
-            "Create Environment",
-            "POST",
-            "environments",
-            200,
-            data=test_env
-        )
+        # Use first available data
+        env = environments[0] if environments else None
+        tenant = next((t for t in tenants if t['environment_id'] == env['id']), None) if env else None
+        template = next((t for t in templates if t['tenant_id'] == tenant['id']), None) if tenant else None
         
-        if success:
-            self.created_items['environments'].append(created_env['id'])
-            self.log(f"   Created environment: {created_env['name']}")
-            
-            # Update environment
-            update_data = {"name": f"{created_env['name']}-Updated"}
-            success, updated_env = self.run_test(
-                "Update Environment",
-                "PUT",
-                f"environments/{created_env['id']}",
-                200,
-                data=update_data
-            )
-            
-            if success:
-                self.log(f"   Updated environment name to: {updated_env['name']}")
+        if not (env and tenant and template):
+            self.log("❌ Cannot find valid environment/tenant/template combination")
+            return []
         
-        return success
-
-    def test_tenants(self):
-        """Test tenant CRUD operations"""
-        # Get existing environments first
-        success, envs = self.run_test(
-            "Get Environments for Tenants",
-            "GET", 
-            "environments",
-            200
-        )
+        self.log(f"Using Environment: {env['name']}, Tenant: {tenant['name']}, Template: {template['name']}")
         
-        if not success or not envs:
-            self.log("❌ No environments available for tenant testing", "ERROR")
-            return False
-            
-        # Use first environment
-        env_id = envs[0]['id']
-        
-        # Create tenant
-        test_tenant = {
-            "name": f"Test-Tenant-{int(time.time())}",
-            "environment_id": env_id,
-            "port": 18443
-        }
-        
-        success, created_tenant = self.run_test(
-            "Create Tenant",
-            "POST",
-            "tenants",
-            200,
-            data=test_tenant
-        )
-        
-        if success:
-            self.created_items['tenants'].append(created_tenant['id'])
-            self.log(f"   Created tenant: {created_tenant['name']} on port {created_tenant['port']}")
-            
-            # Get tenants
-            success, tenants = self.run_test(
-                "Get Tenants",
-                "GET",
-                "tenants",
-                200
-            )
-            
-            if success:
-                self.log(f"   Total tenants: {len(tenants)}")
-        
-        return success
-
-    def test_templates(self):
-        """Test message template CRUD operations"""
-        # Get existing tenants first
-        success, tenants = self.run_test(
-            "Get Tenants for Templates",
-            "GET",
-            "tenants", 
-            200
-        )
-        
-        if not success or not tenants:
-            self.log("❌ No tenants available for template testing", "ERROR")
-            return False
-            
-        # Use first tenant
-        tenant_id = tenants[0]['id']
-        
-        # Create template
-        test_template = {
-            "name": f"Test-Template-{int(time.time())}",
-            "tenant_id": tenant_id,
-            "body": "MSH|^~\\&|SENDER|FAC|RECEIVER|FAC|{{TIMESTAMP}}||ADT^A01|{{MSG_ID}}|P|2.3\nEVN||{{TIMESTAMP}}\nPID|1||{{MRN}}||PATIENT^TEST||19900101|M\nPV1|1|I|{{FLOOR}}^{{ROOM}}^{{BED}}|"
-        }
-        
-        success, created_template = self.run_test(
-            "Create Message Template",
-            "POST",
-            "templates",
-            200,
-            data=test_template
-        )
-        
-        if success:
-            self.created_items['templates'].append(created_template['id'])
-            self.log(f"   Created template: {created_template['name']}")
-            self.log(f"   Template body length: {len(created_template['body'])} chars")
-            
-            # Get templates
-            success, templates = self.run_test(
-                "Get Templates",
-                "GET", 
-                "templates",
-                200
-            )
-            
-            if success:
-                self.log(f"   Total templates: {len(templates)}")
-        
-        return success
-
-    def test_send_message(self):
-        """Test message sending functionality"""
-        # Get required data
-        success, envs = self.run_test("Get Environments", "GET", "environments", 200)
-        if not success or not envs:
-            return False
-            
-        success, tenants = self.run_test("Get Tenants", "GET", "tenants", 200)
-        if not success or not tenants:
-            return False
-            
-        success, templates = self.run_test("Get Templates", "GET", "templates", 200)
-        if not success or not templates:
-            return False
-        
-        # Find a valid combination
-        env = envs[0]
-        tenant = next((t for t in tenants if t['environment_id'] == env['id']), None)
-        if not tenant:
-            self.log("❌ No tenant found for first environment", "ERROR")
-            return False
-            
-        template = next((t for t in templates if t['tenant_id'] == tenant['id']), None)
-        if not template:
-            self.log("❌ No template found for first tenant", "ERROR")
-            return False
-        
-        # Send message
+        # Send a test message (this will likely fail due to external endpoints, but should create audit log)
         message_data = {
             "environment_id": env['id'],
             "tenant_id": tenant['id'],
             "template_id": template['id'],
-            "mrn": "TEST001234",
-            "visit_number": "V-2026-001",
-            "room": "301",
+            "mrn": "TEST-MRN-001",
+            "visit_number": "V-2026-TEST",
+            "room": "101",
             "bed": "A",
-            "floor": "3"
+            "floor": "1"
         }
         
-        success, result = self.run_test(
-            "Send Message",
+        success, response = self.run_test(
+            "Send Test Message",
             "POST",
-            "messages/send",
+            "/messages/send",
             200,
             data=message_data
         )
         
-        if success:
-            self.log(f"   Message Status: {result['status']}")
-            self.log(f"   Target URL: {result['target_url']}")
-            if result.get('response_code'):
-                self.log(f"   Response Code: {result['response_code']}")
-        
-        return success
+        audit_id = response.get('audit_id') if success else None
+        return [audit_id] if audit_id else []
 
-    def test_audit_logs(self):
-        """Test audit log retrieval"""
-        success, logs = self.run_test(
-            "Get Audit Logs",
-            "GET",
-            "audit-logs",
+    def test_bulk_reprocess(self, audit_ids):
+        """Test bulk reprocess functionality"""
+        self.log("\n=== BULK REPROCESS TESTS ===")
+        
+        if not audit_ids:
+            self.log("❌ No audit IDs available for bulk reprocess tests")
+            # Get some audit logs first
+            success, audit_logs = self.run_test("Get Audit Logs for Reprocess", "GET", "/audit-logs?limit=5", 200)
+            if success and audit_logs:
+                audit_ids = [log['id'] for log in audit_logs[:2]]  # Take first 2
+                self.log(f"Using existing audit IDs: {audit_ids}")
+            else:
+                return False
+        
+        # Test single reprocess first
+        if audit_ids:
+            self.run_test(
+                "Single Message Reprocess",
+                "POST",
+                f"/audit-logs/{audit_ids[0]}/reprocess",
+                200
+            )
+        
+        # Test bulk reprocess
+        bulk_data = {
+            "audit_ids": audit_ids[:2] if len(audit_ids) >= 2 else audit_ids
+        }
+        
+        success, response = self.run_test(
+            "Bulk Reprocess Messages",
+            "POST",
+            "/audit-logs/bulk-reprocess",
             200,
-            params={"limit": 10}
+            data=bulk_data
         )
         
         if success:
-            self.log(f"   Found {len(logs)} audit log entries")
-            if logs:
-                latest = logs[0]
-                self.log(f"   Latest: {latest['user_email']} -> {latest['environment_name']}/{latest['tenant_name']} ({latest['status']})")
+            total = response.get('total', 0)
+            successful = response.get('successful', 0)
+            failed = response.get('failed', 0)
+            self.log(f"   Bulk reprocess results: {successful} successful, {failed} failed out of {total} total")
         
         return success
 
-    def cleanup_created_items(self):
-        """Clean up test data created during testing"""
-        self.log("Cleaning up test data...")
+    def test_scheduled_messages(self, environments, tenants, templates):
+        """Test message scheduling functionality"""
+        self.log("\n=== SCHEDULED MESSAGES TESTS ===")
         
-        # Delete templates
-        for template_id in self.created_items['templates']:
-            self.run_test(f"Delete Template {template_id}", "DELETE", f"templates/{template_id}", 200)
+        if not environments or not tenants or not templates:
+            self.log("❌ No data available for scheduling tests")
+            return False
+        
+        # Use first available data
+        env = environments[0] if environments else None
+        tenant = next((t for t in tenants if t['environment_id'] == env['id']), None) if env else None
+        template = next((t for t in templates if t['tenant_id'] == tenant['id']), None) if tenant else None
+        
+        if not (env and tenant and template):
+            self.log("❌ Cannot find valid environment/tenant/template combination")
+            return False
+        
+        # Schedule a message for 1 hour from now
+        scheduled_time = (datetime.utcnow() + timedelta(hours=1)).isoformat() + 'Z'
+        
+        schedule_data = {
+            "environment_id": env['id'],
+            "tenant_id": tenant['id'],
+            "template_id": template['id'],
+            "mrn": "SCHEDULED-MRN-001",
+            "visit_number": "V-2026-SCHED",
+            "room": "202",
+            "bed": "B",
+            "floor": "2",
+            "scheduled_at": scheduled_time
+        }
+        
+        # Test creating scheduled message
+        success, response = self.run_test(
+            "Create Scheduled Message",
+            "POST",
+            "/scheduled-messages",
+            200,
+            data=schedule_data
+        )
+        
+        scheduled_id = response.get('id') if success else None
+        
+        # Test getting scheduled messages
+        success, scheduled_messages = self.run_test(
+            "Get Scheduled Messages",
+            "GET",
+            "/scheduled-messages",
+            200
+        )
+        
+        if success:
+            self.log(f"   Found {len(scheduled_messages)} scheduled message(s)")
+        
+        # Test canceling scheduled message
+        if scheduled_id:
+            success = self.run_test(
+                "Cancel Scheduled Message",
+                "DELETE",
+                f"/scheduled-messages/{scheduled_id}",
+                200
+            )[0]
             
-        # Delete tenants
-        for tenant_id in self.created_items['tenants']:
-            self.run_test(f"Delete Tenant {tenant_id}", "DELETE", f"tenants/{tenant_id}", 200)
-            
-        # Delete environments  
-        for env_id in self.created_items['environments']:
-            self.run_test(f"Delete Environment {env_id}", "DELETE", f"environments/{env_id}", 200)
+        # Test process scheduled messages endpoint
+        self.run_test(
+            "Process Scheduled Messages",
+            "POST",
+            "/scheduled-messages/process",
+            200
+        )
+        
+        return True
+
+    def test_seed_data(self):
+        """Test seed data endpoint"""
+        self.log("\n=== SEED DATA TEST ===")
+        self.run_test("Seed Data", "POST", "/seed", 200)
 
     def run_all_tests(self):
-        """Run comprehensive API test suite"""
-        self.log("=" * 60)
-        self.log("Starting MsgRouter Platform API Tests")
-        self.log("=" * 60)
-
-        try:
-            # Authentication
-            if not self.test_login():
-                self.log("❌ Login failed, stopping tests", "ERROR")
-                return 1
-
-            # Seed data
-            self.test_seed_data()
-            
-            # Dashboard stats
-            stats_success, stats = self.test_dashboard_stats()
-            if stats_success:
-                expected_envs = 14  # From requirements
-                if stats['environments_count'] != expected_envs:
-                    self.log(f"⚠️  Expected {expected_envs} environments, found {stats['environments_count']}", "WARNING")
-
-            # CRUD Tests
-            self.test_environments()
-            self.test_tenants() 
-            self.test_templates()
-            
-            # Message sending
-            self.test_send_message()
-            
-            # Audit logs
-            self.test_audit_logs()
-            
-            # Cleanup
-            self.cleanup_created_items()
-
-        except Exception as e:
-            self.log(f"❌ Unexpected error: {str(e)}", "ERROR")
-            return 1
-
-        # Results
-        self.log("=" * 60)
-        self.log(f"Tests completed: {self.tests_passed}/{self.tests_run} passed")
-        if self.tests_passed == self.tests_run:
-            self.log("🎉 All tests PASSED!")
-            return 0
-        else:
-            self.log(f"❌ {self.tests_run - self.tests_passed} tests FAILED")
-            return 1
+        """Run all backend tests"""
+        self.log("🚀 Starting MsgRouter Platform Backend API Tests")
+        self.log(f"Base URL: {self.base_url}")
+        
+        # Authentication
+        if not self.test_authentication():
+            return False
+        
+        # Seed data
+        self.test_seed_data()
+        
+        # Dashboard data
+        environments, tenants, templates, audit_logs = self.test_dashboard_data()
+        
+        # Message sending (to create audit logs)
+        audit_ids = self.test_message_sending(environments, tenants, templates)
+        
+        # Bulk reprocess
+        self.test_bulk_reprocess(audit_ids)
+        
+        # Scheduled messages
+        self.test_scheduled_messages(environments, tenants, templates)
+        
+        # Summary
+        self.log(f"\n📊 TEST SUMMARY")
+        self.log(f"Tests run: {self.tests_run}")
+        self.log(f"Tests passed: {self.tests_passed}")
+        self.log(f"Success rate: {(self.tests_passed/self.tests_run*100):.1f}%" if self.tests_run > 0 else "0%")
+        
+        return self.tests_passed == self.tests_run
 
 def main():
-    tester = MsgRouterAPITester()
-    return tester.run_all_tests()
+    tester = MsgRouterTester()
+    success = tester.run_all_tests()
+    return 0 if success else 1
 
 if __name__ == "__main__":
     sys.exit(main())

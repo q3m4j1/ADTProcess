@@ -115,6 +115,30 @@ class SendMessageRequest(BaseModel):
     bed: str
     floor: str
     edited_message: Optional[str] = None
+    scheduled_at: Optional[str] = None  # ISO format datetime for scheduling
+
+class BulkReprocessRequest(BaseModel):
+    audit_ids: List[str]
+
+class ScheduledMessageResponse(BaseModel):
+    id: str
+    user_id: str
+    user_email: str
+    environment_id: str
+    environment_name: str
+    tenant_id: str
+    tenant_name: str
+    template_id: str
+    template_name: str
+    mrn: str
+    visit_number: str
+    room: str
+    bed: str
+    floor: str
+    message_body: str
+    scheduled_at: str
+    status: str  # pending, sent, failed, cancelled
+    created_at: str
 
 class AuditLogResponse(BaseModel):
     id: str
@@ -589,6 +613,282 @@ async def reprocess_message(audit_id: str, current_user: dict = Depends(get_curr
         "response_body": audit_log["response_body"],
         "audit_id": audit_log["id"],
         "original_audit_id": audit_id
+    }
+
+@api_router.post("/audit-logs/bulk-reprocess")
+async def bulk_reprocess_messages(request: BulkReprocessRequest, current_user: dict = Depends(get_current_user)):
+    """Reprocess multiple messages at once"""
+    import re
+    
+    results = []
+    for audit_id in request.audit_ids:
+        try:
+            # Get the original audit log
+            original_log = await db.audit_logs.find_one({"id": audit_id}, {"_id": 0})
+            if not original_log:
+                results.append({"audit_id": audit_id, "status": "error", "message": "Audit log not found"})
+                continue
+            
+            target_url = original_log.get("target_url")
+            original_message = original_log.get("message_sent")
+            
+            if not target_url or not original_message:
+                results.append({"audit_id": audit_id, "status": "error", "message": "Missing target URL or message"})
+                continue
+            
+            # Update timestamp
+            final_message = original_message
+            timestamp_pattern = r'\d{14}'
+            new_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            final_message = re.sub(timestamp_pattern, new_timestamp, final_message, count=1)
+            
+            # Create new audit log
+            audit_log = {
+                "id": str(uuid.uuid4()),
+                "user_id": current_user["user_id"],
+                "user_email": current_user["email"],
+                "environment_name": original_log["environment_name"],
+                "tenant_name": original_log["tenant_name"],
+                "template_name": original_log["template_name"],
+                "mrn": original_log["mrn"],
+                "visit_number": original_log["visit_number"],
+                "message_sent": final_message,
+                "target_url": target_url,
+                "status": "pending",
+                "response_code": None,
+                "response_body": None,
+                "original_audit_id": audit_id,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            # Send message
+            try:
+                async with httpx.AsyncClient(verify=False, timeout=30.0) as http_client:
+                    response = await http_client.post(
+                        target_url,
+                        content=final_message,
+                        headers={"Content-Type": "text/plain"}
+                    )
+                    audit_log["status"] = "sent" if response.status_code < 400 else "failed"
+                    audit_log["response_code"] = response.status_code
+                    audit_log["response_body"] = response.text[:500] if response.text else None
+            except httpx.TimeoutException:
+                audit_log["status"] = "failed"
+                audit_log["response_body"] = "Connection timeout"
+            except httpx.ConnectError as e:
+                audit_log["status"] = "failed"
+                audit_log["response_body"] = f"Connection error: {str(e)[:200]}"
+            except Exception as e:
+                audit_log["status"] = "failed"
+                audit_log["response_body"] = f"Error: {str(e)[:200]}"
+            
+            await db.audit_logs.insert_one(audit_log)
+            results.append({
+                "original_audit_id": audit_id,
+                "new_audit_id": audit_log["id"],
+                "status": audit_log["status"]
+            })
+        except Exception as e:
+            results.append({"audit_id": audit_id, "status": "error", "message": str(e)})
+    
+    successful = sum(1 for r in results if r.get("status") == "sent")
+    failed = sum(1 for r in results if r.get("status") in ["failed", "error"])
+    
+    return {
+        "total": len(request.audit_ids),
+        "successful": successful,
+        "failed": failed,
+        "results": results
+    }
+
+# ==================== SCHEDULED MESSAGES ====================
+
+@api_router.get("/scheduled-messages", response_model=List[ScheduledMessageResponse])
+async def get_scheduled_messages(current_user: dict = Depends(get_current_user)):
+    """Get all scheduled messages"""
+    scheduled = await db.scheduled_messages.find({}, {"_id": 0}).sort("scheduled_at", 1).to_list(1000)
+    return [ScheduledMessageResponse(**s) for s in scheduled]
+
+@api_router.post("/scheduled-messages")
+async def create_scheduled_message(request: SendMessageRequest, current_user: dict = Depends(get_current_user)):
+    """Schedule a message for later delivery"""
+    
+    if not request.scheduled_at:
+        raise HTTPException(status_code=400, detail="scheduled_at is required")
+    
+    # Validate scheduled time is in the future
+    try:
+        scheduled_time = datetime.fromisoformat(request.scheduled_at.replace('Z', '+00:00'))
+        if scheduled_time <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid datetime format")
+    
+    # Get environment, tenant, and template
+    environment = await db.environments.find_one({"id": request.environment_id}, {"_id": 0})
+    if not environment:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    
+    tenant = await db.tenants.find_one({"id": request.tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    template = await db.message_templates.find_one({"id": request.template_id}, {"_id": 0})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Build the message
+    if request.edited_message:
+        message_body = request.edited_message
+    else:
+        message_body = template["body"]
+        message_body = message_body.replace("{{MRN}}", request.mrn)
+        message_body = message_body.replace("{{VISIT_NUMBER}}", request.visit_number)
+        message_body = message_body.replace("{{ROOM}}", request.room)
+        message_body = message_body.replace("{{BED}}", request.bed)
+        message_body = message_body.replace("{{FLOOR}}", request.floor)
+        # Timestamp and MSG_ID will be generated at send time
+    
+    scheduled_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["user_id"],
+        "user_email": current_user["email"],
+        "environment_id": request.environment_id,
+        "environment_name": environment["name"],
+        "tenant_id": request.tenant_id,
+        "tenant_name": tenant["name"],
+        "template_id": request.template_id,
+        "template_name": template["name"],
+        "mrn": request.mrn,
+        "visit_number": request.visit_number,
+        "room": request.room,
+        "bed": request.bed,
+        "floor": request.floor,
+        "message_body": message_body,
+        "scheduled_at": request.scheduled_at,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.scheduled_messages.insert_one(scheduled_doc)
+    
+    return ScheduledMessageResponse(**{k: v for k, v in scheduled_doc.items() if k != "_id"})
+
+@api_router.delete("/scheduled-messages/{message_id}")
+async def cancel_scheduled_message(message_id: str, current_user: dict = Depends(get_current_user)):
+    """Cancel a scheduled message"""
+    result = await db.scheduled_messages.delete_one({"id": message_id, "status": "pending"})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Scheduled message not found or already processed")
+    return {"message": "Scheduled message cancelled"}
+
+@api_router.post("/scheduled-messages/process")
+async def process_scheduled_messages(current_user: dict = Depends(get_current_user)):
+    """Process all due scheduled messages (can be called manually or by a cron job)"""
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Find all pending scheduled messages that are due
+    due_messages = await db.scheduled_messages.find({
+        "status": "pending",
+        "scheduled_at": {"$lte": now}
+    }, {"_id": 0}).to_list(100)
+    
+    results = []
+    
+    for scheduled in due_messages:
+        try:
+            # Get environment and tenant for URL building
+            environment = await db.environments.find_one({"id": scheduled["environment_id"]}, {"_id": 0})
+            tenant = await db.tenants.find_one({"id": scheduled["tenant_id"]}, {"_id": 0})
+            
+            if not environment or not tenant:
+                await db.scheduled_messages.update_one(
+                    {"id": scheduled["id"]},
+                    {"$set": {"status": "failed"}}
+                )
+                results.append({"id": scheduled["id"], "status": "failed", "reason": "Environment or tenant not found"})
+                continue
+            
+            # Build target URL
+            base_address = environment["address"].rstrip("/")
+            if "://" in base_address:
+                protocol, rest = base_address.split("://", 1)
+                host = rest.split(":")[0] if ":" in rest else rest.split("/")[0]
+                target_url = f"{protocol}://{host}:{tenant['port']}"
+            else:
+                target_url = f"https://{base_address}:{tenant['port']}"
+            
+            # Finalize message with timestamp and message ID
+            final_message = scheduled["message_body"]
+            final_message = final_message.replace("{{TIMESTAMP}}", datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
+            final_message = final_message.replace("{{MSG_ID}}", str(uuid.uuid4())[:8].upper())
+            
+            # Create audit log
+            audit_log = {
+                "id": str(uuid.uuid4()),
+                "user_id": scheduled["user_id"],
+                "user_email": scheduled["user_email"],
+                "environment_name": scheduled["environment_name"],
+                "tenant_name": scheduled["tenant_name"],
+                "template_name": scheduled["template_name"],
+                "mrn": scheduled["mrn"],
+                "visit_number": scheduled["visit_number"],
+                "message_sent": final_message,
+                "target_url": target_url,
+                "status": "pending",
+                "response_code": None,
+                "response_body": None,
+                "scheduled_message_id": scheduled["id"],
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            # Send message
+            try:
+                async with httpx.AsyncClient(verify=False, timeout=30.0) as http_client:
+                    response = await http_client.post(
+                        target_url,
+                        content=final_message,
+                        headers={"Content-Type": "text/plain"}
+                    )
+                    audit_log["status"] = "sent" if response.status_code < 400 else "failed"
+                    audit_log["response_code"] = response.status_code
+                    audit_log["response_body"] = response.text[:500] if response.text else None
+            except httpx.TimeoutException:
+                audit_log["status"] = "failed"
+                audit_log["response_body"] = "Connection timeout"
+            except httpx.ConnectError as e:
+                audit_log["status"] = "failed"
+                audit_log["response_body"] = f"Connection error: {str(e)[:200]}"
+            except Exception as e:
+                audit_log["status"] = "failed"
+                audit_log["response_body"] = f"Error: {str(e)[:200]}"
+            
+            # Save audit log
+            await db.audit_logs.insert_one(audit_log)
+            
+            # Update scheduled message status
+            await db.scheduled_messages.update_one(
+                {"id": scheduled["id"]},
+                {"$set": {"status": audit_log["status"]}}
+            )
+            
+            results.append({
+                "id": scheduled["id"],
+                "status": audit_log["status"],
+                "audit_id": audit_log["id"]
+            })
+            
+        except Exception as e:
+            await db.scheduled_messages.update_one(
+                {"id": scheduled["id"]},
+                {"$set": {"status": "failed"}}
+            )
+            results.append({"id": scheduled["id"], "status": "error", "reason": str(e)})
+    
+    return {
+        "processed": len(results),
+        "results": results
     }
 
 # ==================== DASHBOARD STATS ====================

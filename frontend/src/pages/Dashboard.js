@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
+import { Checkbox } from '../components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ import {
   Eye,
   ChevronDown,
   ChevronUp,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
@@ -74,6 +76,8 @@ export default function Dashboard() {
   const [expandedRows, setExpandedRows] = useState({});
   const [reprocessing, setReprocessing] = useState({});
   const [viewMessageDialog, setViewMessageDialog] = useState(null);
+  const [selectedLogs, setSelectedLogs] = useState({});
+  const [bulkReprocessing, setBulkReprocessing] = useState(false);
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
 
@@ -95,6 +99,7 @@ export default function Dashboard() {
       setTenants(tenantsRes.data);
       setTemplates(templatesRes.data);
       setAuditLogs(logsRes.data);
+      setSelectedLogs({});
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
@@ -193,6 +198,64 @@ export default function Dashboard() {
       toast.error(error.response?.data?.detail || 'Failed to reprocess message');
     } finally {
       setReprocessing((prev) => ({ ...prev, [logId]: false }));
+    }
+  };
+
+  // Bulk selection handlers
+  const selectedCount = Object.values(selectedLogs).filter(Boolean).length;
+  const allSelected = filteredLogs.length > 0 && filteredLogs.slice(0, 50).every((log) => selectedLogs[log.id]);
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedLogs({});
+    } else {
+      const newSelected = {};
+      filteredLogs.slice(0, 50).forEach((log) => {
+        newSelected[log.id] = true;
+      });
+      setSelectedLogs(newSelected);
+    }
+  };
+
+  const toggleSelectLog = (logId) => {
+    setSelectedLogs((prev) => ({ ...prev, [logId]: !prev[logId] }));
+  };
+
+  const handleBulkReprocess = async () => {
+    const selectedIds = Object.entries(selectedLogs)
+      .filter(([_, selected]) => selected)
+      .map(([id]) => id);
+    
+    if (selectedIds.length === 0) return;
+
+    setBulkReprocessing(true);
+    try {
+      const response = await axios.post(`${API}/audit-logs/bulk-reprocess`, {
+        audit_ids: selectedIds,
+      });
+      
+      const { successful, failed, total } = response.data;
+      
+      if (successful > 0 && failed === 0) {
+        toast.success(`Successfully reprocessed ${successful} message(s)`);
+      } else if (successful > 0 && failed > 0) {
+        toast.warning(`Reprocessed ${successful} of ${total} messages. ${failed} failed.`);
+      } else {
+        toast.error(`Failed to reprocess ${failed} message(s)`);
+      }
+      
+      // Refresh data
+      const [statsRes, logsRes] = await Promise.all([
+        axios.get(`${API}/dashboard/stats`),
+        axios.get(`${API}/audit-logs?limit=100`),
+      ]);
+      setStats(statsRes.data);
+      setAuditLogs(logsRes.data);
+      setSelectedLogs({});
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to bulk reprocess messages');
+    } finally {
+      setBulkReprocessing(false);
     }
   };
 
@@ -538,6 +601,21 @@ export default function Dashboard() {
               </Badge>
             </div>
             <div className="flex items-center gap-3">
+              {selectedCount > 0 && (
+                <Button
+                  onClick={handleBulkReprocess}
+                  disabled={bulkReprocessing}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="bulk-reprocess-btn"
+                >
+                  {bulkReprocessing ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Reprocess {selectedCount} selected
+                </Button>
+              )}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
@@ -570,6 +648,13 @@ export default function Dashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="w-10 p-3">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleSelectAll}
+                        data-testid="select-all-checkbox"
+                      />
+                    </th>
                     <th className="w-10 p-3"></th>
                     <th className="text-left p-3 text-xs font-semibold text-slate-500 uppercase">
                       Timestamp
@@ -599,9 +684,16 @@ export default function Dashboard() {
                     <>
                       <tr
                         key={log.id}
-                        className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+                        className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${selectedLogs[log.id] ? 'bg-blue-50/50' : ''}`}
                         data-testid={`audit-row-${log.id}`}
                       >
+                        <td className="p-3">
+                          <Checkbox
+                            checked={selectedLogs[log.id] || false}
+                            onCheckedChange={() => toggleSelectLog(log.id)}
+                            data-testid={`select-log-${log.id}`}
+                          />
+                        </td>
                         <td className="p-3">
                           <Button
                             variant="ghost"
@@ -672,7 +764,7 @@ export default function Dashboard() {
                       </tr>
                       {expandedRows[log.id] && (
                         <tr key={`${log.id}-details`} className="bg-slate-50">
-                          <td colSpan={8} className="p-4">
+                          <td colSpan={9} className="p-4">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
                                 <p className="text-xs font-semibold text-slate-500 mb-1">Visit Number</p>
@@ -698,7 +790,7 @@ export default function Dashboard() {
                   ))}
                   {filteredLogs.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-500">
+                      <td colSpan={9} className="p-8 text-center text-slate-500">
                         No audit logs found
                       </td>
                     </tr>

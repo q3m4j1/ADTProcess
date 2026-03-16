@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Clock,
 } from 'lucide-react';
 import SettingsModal from './SettingsModal';
 
@@ -36,6 +37,7 @@ export default function Layout({ children }) {
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/send', icon: Send, label: 'Send Message' },
+    { path: '/scheduled', icon: Clock, label: 'Scheduled' },
     ...(isAdmin ? [{ path: '/users', icon: Users, label: 'Users' }] : []),
   ];
 
@@ -223,6 +225,7 @@ export default function Layout({ children }) {
             <p className="text-sm text-slate-500">
               {location.pathname === '/' && 'System overview and key metrics'}
               {location.pathname === '/send' && 'Send HL7 messages to configured endpoints'}
+              {location.pathname === '/scheduled' && 'View and manage scheduled messages'}
               {location.pathname === '/users' && 'Manage platform users and roles'}
             </p>
           </div>

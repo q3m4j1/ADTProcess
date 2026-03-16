@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import SendMessage from "./pages/SendMessage";
+import ScheduledMessages from "./pages/ScheduledMessages";
 import Users from "./pages/Users";
 import Layout from "./components/Layout";
 import axios from "axios";
@@ -96,6 +97,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SendMessage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/scheduled"
+        element={
+          <ProtectedRoute>
+            <ScheduledMessages />
           </ProtectedRoute>
         }
       />

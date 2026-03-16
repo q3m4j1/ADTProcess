@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { Switch } from '../components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -30,6 +32,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Clock,
+  Calendar,
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -60,6 +64,9 @@ export default function SendMessage() {
   const [floor, setFloor] = useState('');
   const [editedMessage, setEditedMessage] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -142,19 +149,44 @@ export default function SendMessage() {
   const handleSend = async () => {
     setSending(true);
     try {
-      const response = await axios.post(`${API}/messages/send`, {
-        environment_id: selectedEnv,
-        tenant_id: selectedTenant,
-        template_id: selectedTemplate,
-        mrn,
-        visit_number: visitNumber,
-        room,
-        bed,
-        floor,
-        edited_message: isEditing ? editedMessage : null,
-      });
-      setResult(response.data);
-      toast.success(response.data.status === 'sent' ? 'Message sent successfully!' : 'Message sending failed');
+      // Check if scheduling is enabled
+      if (scheduleEnabled && scheduledDate && scheduledTime) {
+        const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+        
+        const response = await axios.post(`${API}/scheduled-messages`, {
+          environment_id: selectedEnv,
+          tenant_id: selectedTenant,
+          template_id: selectedTemplate,
+          mrn,
+          visit_number: visitNumber,
+          room,
+          bed,
+          floor,
+          edited_message: isEditing ? editedMessage : null,
+          scheduled_at: scheduledAt,
+        });
+        setResult({ 
+          status: 'scheduled', 
+          scheduled_at: scheduledAt,
+          message: editedMessage || generatePreviewMessage()
+        });
+        toast.success('Message scheduled successfully!');
+      } else {
+        // Immediate send
+        const response = await axios.post(`${API}/messages/send`, {
+          environment_id: selectedEnv,
+          tenant_id: selectedTenant,
+          template_id: selectedTemplate,
+          mrn,
+          visit_number: visitNumber,
+          room,
+          bed,
+          floor,
+          edited_message: isEditing ? editedMessage : null,
+        });
+        setResult(response.data);
+        toast.success(response.data.status === 'sent' ? 'Message sent successfully!' : 'Message sending failed');
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to send message');
       setResult({ status: 'failed', response_body: error.response?.data?.detail });
@@ -176,6 +208,9 @@ export default function SendMessage() {
     setFloor('');
     setEditedMessage('');
     setIsEditing(false);
+    setScheduleEnabled(false);
+    setScheduledDate('');
+    setScheduledTime('');
     setResult(null);
   };
 
@@ -254,6 +289,19 @@ export default function SendMessage() {
                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Message Sent Successfully!</h2>
                 <p className="text-slate-500 mb-6">
                   Your HL7 message has been delivered to {selectedEnvObj?.name} / {selectedTenantObj?.name}
+                </p>
+              </>
+            ) : result.status === 'scheduled' ? (
+              <>
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Clock className="w-8 h-8 text-blue-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-2">Message Scheduled!</h2>
+                <p className="text-slate-500 mb-2">
+                  Your HL7 message has been scheduled for delivery
+                </p>
+                <p className="text-lg font-medium text-blue-600 mb-6">
+                  {format(new Date(result.scheduled_at), 'MMMM dd, yyyy \'at\' hh:mm a')}
                 </p>
               </>
             ) : (
@@ -595,6 +643,55 @@ export default function SendMessage() {
                     </p>
                   )}
                 </div>
+
+                {/* Schedule Option */}
+                <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-5 h-5 text-blue-500" />
+                      <div>
+                        <Label className="text-slate-900 font-medium">Schedule Message</Label>
+                        <p className="text-xs text-slate-500">Send this message at a specific time</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={scheduleEnabled}
+                      onCheckedChange={setScheduleEnabled}
+                      data-testid="schedule-toggle"
+                    />
+                  </div>
+                  {scheduleEnabled && (
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
+                      <div className="space-y-2">
+                        <Label className="text-slate-700 flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-slate-400" />
+                          Date
+                        </Label>
+                        <Input
+                          type="date"
+                          value={scheduledDate}
+                          onChange={(e) => setScheduledDate(e.target.value)}
+                          min={format(new Date(), 'yyyy-MM-dd')}
+                          className="bg-white"
+                          data-testid="schedule-date"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-slate-700 flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-slate-400" />
+                          Time
+                        </Label>
+                        <Input
+                          type="time"
+                          value={scheduledTime}
+                          onChange={(e) => setScheduledTime(e.target.value)}
+                          className="bg-white"
+                          data-testid="schedule-time"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}
@@ -627,19 +724,24 @@ export default function SendMessage() {
             ) : (
               <Button
                 onClick={handleSend}
-                disabled={sending}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={sending || (scheduleEnabled && (!scheduledDate || !scheduledTime))}
+                className={scheduleEnabled ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}
                 data-testid="send-btn"
               >
                 {sending ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                    Sending...
+                    {scheduleEnabled ? 'Scheduling...' : 'Sending...'}
+                  </>
+                ) : scheduleEnabled ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2" />
+                    Schedule Message
                   </>
                 ) : (
                   <>
                     <Send className="w-4 h-4 mr-2" />
-                    Send Message
+                    Send Now
                   </>
                 )}
               </Button>
