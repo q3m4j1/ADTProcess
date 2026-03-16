@@ -8,7 +8,7 @@ Build an enterprise HL7 message routing platform with:
 4. Real HTTP integration for sending messages
 
 ## Architecture
-- **Frontend**: React 19 + Tailwind CSS + Shadcn UI
+- **Frontend**: React 19 + Tailwind CSS + Shadcn UI + Recharts
 - **Backend**: FastAPI (Python) with async MongoDB (Motor)
 - **Database**: MongoDB
 - **Authentication**: JWT with bcrypt password hashing
@@ -26,7 +26,9 @@ Build an enterprise HL7 message routing platform with:
 - Audit trail with filtering and search
 - Real HTTP POST to configured endpoints
 
-## What's Been Implemented (Feb 23, 2026)
+## What's Been Implemented
+
+### Phase 1 (Feb 23, 2026)
 - [x] JWT Authentication with Admin/User roles
 - [x] Dashboard with 8 stat cards, quick overview, audit trail
 - [x] Settings modal with 3 tabs (Environments, Tenants, Templates)
@@ -42,6 +44,28 @@ Build an enterprise HL7 message routing platform with:
 - [x] User management page (Admin only)
 - [x] Responsive sidebar navigation
 - [x] Toast notifications with Sonner
+
+### Phase 2 (Mar 16, 2026)
+- [x] Dashboard Analytics Charts (Recharts):
+  - Message Volume (Last 7 Days) - Area chart
+  - Messages by Environment - Pie chart
+  - Top Tenants by Activity - Horizontal bar chart
+- [x] Reprocess Messages Feature:
+  - View message details dialog
+  - Reprocess individual messages
+  - Expandable audit trail rows
+- [x] Bulk Reprocess Feature:
+  - Checkbox selection for audit entries
+  - Select All checkbox
+  - Bulk reprocess multiple messages at once
+- [x] Message Scheduling:
+  - Schedule toggle in Step 3 of wizard
+  - Date and Time pickers
+  - Scheduled Messages page to view/manage
+  - Process Due Messages button
+  - Cancel scheduled messages
+- [x] Removed user self-registration (admin only can create users)
+- [x] Fixed port input field in tenant management
 
 ## Supported HL7 Message Types
 - ADT: A01, A02, A03, A06, A07, A08, A11, A12, A13, A20, A28, A29, A36, A45
@@ -79,20 +103,21 @@ Build an enterprise HL7 message routing platform with:
 - [x] Message sending workflow
 - [x] Audit logging
 
-### P1 (High Priority) - Next
-- [ ] Bulk message sending
-- [ ] Template versioning
-- [ ] Export audit logs to CSV
-- [ ] Message retry functionality
+### P1 (High Priority) - Completed
+- [x] Bulk message reprocessing
+- [x] Message scheduling/queue
+- [x] Dashboard analytics charts
+- [x] Message retry functionality
 
-### P2 (Medium Priority)
-- [ ] Dashboard charts (message volume over time)
-- [ ] Environment health monitoring
+### P2 (Medium Priority) - Next
+- [ ] Export audit logs to CSV
+- [ ] Template versioning
+- [ ] Webhook notifications on failures
 - [ ] Email notifications on failures
-- [ ] Template categories/tags
+- [ ] Bulk tenant/template import from CSV
 
 ## Next Tasks
-1. Add more default message templates for common HL7 message types
-2. Implement bulk tenant/template import from CSV
-3. Add dashboard analytics charts
-4. Implement message queue for reliable delivery
+1. Add export audit logs to CSV functionality
+2. Implement webhook notifications for failed messages
+3. Add template versioning/history
+4. Implement cron job for automatic scheduled message processing
