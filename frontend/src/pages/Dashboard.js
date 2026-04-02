@@ -681,9 +681,8 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {filteredLogs.slice(0, 50).map((log) => (
-                    <>
+                    <React.Fragment key={log.id}>
                       <tr
-                        key={log.id}
                         className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${selectedLogs[log.id] ? 'bg-blue-50/50' : ''}`}
                         data-testid={`audit-row-${log.id}`}
                       >
@@ -763,7 +762,7 @@ export default function Dashboard() {
                         </td>
                       </tr>
                       {expandedRows[log.id] && (
-                        <tr key={`${log.id}-details`} className="bg-slate-50">
+                        <tr className="bg-slate-50">
                           <td colSpan={9} className="p-4">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
@@ -786,7 +785,7 @@ export default function Dashboard() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                   {filteredLogs.length === 0 && (
                     <tr>
