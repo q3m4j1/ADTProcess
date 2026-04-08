@@ -32,6 +32,7 @@ import {
   X,
   ChevronDown,
   ChevronRight,
+  Zap,
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -57,6 +58,7 @@ export default function SettingsModal({ open, onOpenChange }) {
   const [environments, setEnvironments] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [operationTypes, setOperationTypes] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Environment form
@@ -74,6 +76,10 @@ export default function SettingsModal({ open, onOpenChange }) {
   const [filterEnvId, setFilterEnvId] = useState('');
   const [filterTenantId, setFilterTenantId] = useState('');
 
+  // Operation Type form
+  const [opTypeForm, setOpTypeForm] = useState({ name: '', category: 'update', hl7_event: '', description: '' });
+  const [editingOpType, setEditingOpType] = useState(null);
+
   useEffect(() => {
     if (open) {
       fetchData();
@@ -83,14 +89,16 @@ export default function SettingsModal({ open, onOpenChange }) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [envsRes, tenantsRes, templatesRes] = await Promise.all([
+      const [envsRes, tenantsRes, templatesRes, opTypesRes] = await Promise.all([
         axios.get(`${API}/environments`),
         axios.get(`${API}/tenants`),
         axios.get(`${API}/templates`),
+        axios.get(`${API}/operation-types`),
       ]);
       setEnvironments(envsRes.data);
       setTenants(tenantsRes.data);
       setTemplates(templatesRes.data);
+      setOperationTypes(opTypesRes.data);
     } catch (error) {
       toast.error('Failed to load settings data');
     } finally {
@@ -263,6 +271,10 @@ export default function SettingsModal({ open, onOpenChange }) {
               <TabsTrigger value="templates" data-testid="tab-templates" className="gap-2">
                 <FileText className="w-4 h-4" />
                 Templates
+              </TabsTrigger>
+              <TabsTrigger value="operation-types" data-testid="tab-operation-types" className="gap-2">
+                <Zap className="w-4 h-4" />
+                Operations
               </TabsTrigger>
             </TabsList>
           </div>
@@ -730,6 +742,190 @@ export default function SettingsModal({ open, onOpenChange }) {
                   })}
                   {filteredTemplates.length === 0 && (
                     <p className="text-center text-slate-500 py-8">No templates found</p>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Operation Types Tab */}
+            <TabsContent value="operation-types" className="p-6 m-0">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Operation Types</h3>
+                  <p className="text-sm text-slate-500">Configure update operation types for ADT Operations (ORM, ORU, Medications, etc.)</p>
+                </div>
+
+                {/* Add/Edit Form */}
+                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-slate-700">Operation Name</Label>
+                      <Input
+                        value={opTypeForm.name}
+                        onChange={(e) => setOpTypeForm({ ...opTypeForm, name: e.target.value })}
+                        placeholder="e.g., Medication Administration"
+                        className="mt-1"
+                        data-testid="optype-name-input"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-slate-700">HL7 Event Type</Label>
+                      <Input
+                        value={opTypeForm.hl7_event}
+                        onChange={(e) => setOpTypeForm({ ...opTypeForm, hl7_event: e.target.value })}
+                        placeholder="e.g., RAS^O17, ORM^O01"
+                        className="mt-1"
+                        data-testid="optype-event-input"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-slate-700">Category</Label>
+                      <Select
+                        value={opTypeForm.category}
+                        onValueChange={(value) => setOpTypeForm({ ...opTypeForm, category: value })}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="optype-category-select">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="update">Update</SelectItem>
+                          <SelectItem value="medications">Medications</SelectItem>
+                          <SelectItem value="orders">Orders</SelectItem>
+                          <SelectItem value="results">Results</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-slate-700">Description</Label>
+                      <Input
+                        value={opTypeForm.description}
+                        onChange={(e) => setOpTypeForm({ ...opTypeForm, description: e.target.value })}
+                        placeholder="Brief description"
+                        className="mt-1"
+                        data-testid="optype-desc-input"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    {editingOpType && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setEditingOpType(null);
+                          setOpTypeForm({ name: '', category: 'update', hl7_event: '', description: '' });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      onClick={async () => {
+                        try {
+                          if (editingOpType) {
+                            await axios.put(`${API}/operation-types/${editingOpType.id}`, opTypeForm);
+                            toast.success('Operation type updated');
+                          } else {
+                            await axios.post(`${API}/operation-types`, opTypeForm);
+                            toast.success('Operation type created');
+                          }
+                          setOpTypeForm({ name: '', category: 'update', hl7_event: '', description: '' });
+                          setEditingOpType(null);
+                          fetchData();
+                        } catch (error) {
+                          toast.error(error.response?.data?.detail || 'Failed to save operation type');
+                        }
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                      disabled={!opTypeForm.name || !opTypeForm.hl7_event}
+                      data-testid="save-optype-btn"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      {editingOpType ? 'Update' : 'Add'}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Operation Types List */}
+                <div className="space-y-2">
+                  {operationTypes.map((opType) => (
+                    <div
+                      key={opType.id}
+                      className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                      data-testid={`optype-item-${opType.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Zap className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-900">{opType.name}</p>
+                          <p className="text-sm text-slate-500">
+                            <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-xs">{opType.hl7_event}</span>
+                            {opType.description && ` - ${opType.description}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full capitalize">
+                          {opType.category}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditingOpType(opType);
+                            setOpTypeForm({
+                              name: opType.name,
+                              category: opType.category,
+                              hl7_event: opType.hl7_event,
+                              description: opType.description || ''
+                            });
+                          }}
+                          data-testid={`edit-optype-${opType.id}`}
+                        >
+                          <Pencil className="w-4 h-4 text-slate-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={async () => {
+                            if (!window.confirm('Delete this operation type?')) return;
+                            try {
+                              await axios.delete(`${API}/operation-types/${opType.id}`);
+                              toast.success('Operation type deleted');
+                              fetchData();
+                            } catch (error) {
+                              toast.error(error.response?.data?.detail || 'Failed to delete operation type');
+                            }
+                          }}
+                          data-testid={`delete-optype-${opType.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {operationTypes.length === 0 && (
+                    <div className="text-center py-8">
+                      <p className="text-slate-500 mb-4">No operation types configured yet</p>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await axios.post(`${API}/seed-operation-types`);
+                            toast.success('Default operation types created');
+                            fetchData();
+                          } catch (error) {
+                            toast.error('Failed to seed operation types');
+                          }
+                        }}
+                        data-testid="seed-optypes-btn"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Default Types
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

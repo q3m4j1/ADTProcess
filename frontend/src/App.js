@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import SendMessage from "./pages/SendMessage";
 import ScheduledMessages from "./pages/ScheduledMessages";
+import ADTOperations from "./pages/ADTOperations";
 import Users from "./pages/Users";
 import Layout from "./components/Layout";
 import axios from "axios";
@@ -105,6 +106,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ScheduledMessages />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/adt"
+        element={
+          <ProtectedRoute>
+            <ADTOperations />
           </ProtectedRoute>
         }
       />

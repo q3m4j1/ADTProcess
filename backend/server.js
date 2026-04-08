@@ -1007,6 +1007,683 @@ app.post('/api/seed', async (req, res) => {
   }
 });
 
+// ==================== OPERATION TYPES (Admin Configurable) ====================
+
+app.get('/api/operation-types', authenticate, async (req, res) => {
+  try {
+    const category = req.query.category;
+    const query = category ? { category } : {};
+    const types = await db.collection('operation_types')
+      .find(query, { projection: { _id: 0 } })
+      .sort({ order: 1 })
+      .toArray();
+    res.json(types);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+app.post('/api/operation-types', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, category, hl7_event, description, fields } = req.body;
+    
+    const typeDoc = {
+      id: uuidv4(),
+      name,
+      category, // 'update', 'custom', etc.
+      hl7_event, // e.g., 'ORM^O01', 'ORU^R01'
+      description,
+      fields: fields || [], // Array of field definitions
+      order: Date.now(),
+      created_at: new Date().toISOString()
+    };
+    
+    await db.collection('operation_types').insertOne(typeDoc);
+    const { _id, ...result } = typeDoc;
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+app.put('/api/operation-types/:typeId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { typeId } = req.params;
+    const updateData = {};
+    
+    if (req.body.name) updateData.name = req.body.name;
+    if (req.body.category) updateData.category = req.body.category;
+    if (req.body.hl7_event) updateData.hl7_event = req.body.hl7_event;
+    if (req.body.description !== undefined) updateData.description = req.body.description;
+    if (req.body.fields) updateData.fields = req.body.fields;
+    
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ detail: 'No update data provided' });
+    }
+    
+    const result = await db.collection('operation_types').updateOne({ id: typeId }, { $set: updateData });
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ detail: 'Operation type not found' });
+    }
+    
+    const type = await db.collection('operation_types').findOne({ id: typeId }, { projection: { _id: 0 } });
+    res.json(type);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+app.delete('/api/operation-types/:typeId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { typeId } = req.params;
+    const result = await db.collection('operation_types').deleteOne({ id: typeId });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ detail: 'Operation type not found' });
+    }
+    
+    res.json({ message: 'Operation type deleted' });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// ==================== PATIENTS ====================
+
+app.get('/api/patients', authenticate, async (req, res) => {
+  try {
+    const { tenant_id, status, mrn } = req.query;
+    const query = {};
+    if (tenant_id) query.tenant_id = tenant_id;
+    if (status) query.status = status;
+    if (mrn) query.mrn = { $regex: mrn, $options: 'i' };
+    
+    const patients = await db.collection('patients')
+      .find(query, { projection: { _id: 0 } })
+      .sort({ created_at: -1 })
+      .limit(200)
+      .toArray();
+    res.json(patients);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+app.get('/api/patients/:patientId', authenticate, async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const patient = await db.collection('patients').findOne({ id: patientId }, { projection: { _id: 0 } });
+    
+    if (!patient) {
+      return res.status(404).json({ detail: 'Patient not found' });
+    }
+    
+    res.json(patient);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+app.post('/api/patients', authenticate, async (req, res) => {
+  try {
+    const { mrn, csn, first_name, last_name, birth_date, gender, language, interpreter_needed, tenant_id, environment_id } = req.body;
+    
+    const patientDoc = {
+      id: uuidv4(),
+      mrn,
+      csn,
+      first_name,
+      last_name,
+      birth_date,
+      gender,
+      language,
+      interpreter_needed: interpreter_needed || false,
+      tenant_id,
+      environment_id,
+      status: 'registered',
+      current_bed: null,
+      current_room: null,
+      current_floor: null,
+      admission_date: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    await db.collection('patients').insertOne(patientDoc);
+    const { _id, ...result } = patientDoc;
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+app.put('/api/patients/:patientId', authenticate, async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const updateData = { ...req.body, updated_at: new Date().toISOString() };
+    delete updateData.id;
+    delete updateData.created_at;
+    
+    const result = await db.collection('patients').updateOne({ id: patientId }, { $set: updateData });
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ detail: 'Patient not found' });
+    }
+    
+    const patient = await db.collection('patients').findOne({ id: patientId }, { projection: { _id: 0 } });
+    res.json(patient);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// ==================== ADT OPERATIONS ====================
+
+// Admission
+app.post('/api/adt/admission', authenticate, async (req, res) => {
+  try {
+    const { 
+      environment_id, tenant_id, mrn, csn, 
+      first_name, last_name, birth_date, gender, language, interpreter_needed,
+      bed, room, floor 
+    } = req.body;
+    
+    const environment = await db.collection('environments').findOne({ id: environment_id }, { projection: { _id: 0 } });
+    if (!environment) return res.status(404).json({ detail: 'Environment not found' });
+    
+    const tenant = await db.collection('tenants').findOne({ id: tenant_id }, { projection: { _id: 0 } });
+    if (!tenant) return res.status(404).json({ detail: 'Tenant not found' });
+    
+    // Create or update patient
+    let patient = await db.collection('patients').findOne({ mrn, tenant_id }, { projection: { _id: 0 } });
+    
+    if (!patient) {
+      patient = {
+        id: uuidv4(),
+        mrn,
+        csn,
+        first_name,
+        last_name,
+        birth_date,
+        gender,
+        language,
+        interpreter_needed: interpreter_needed || false,
+        tenant_id,
+        environment_id,
+        status: 'admitted',
+        current_bed: bed,
+        current_room: room,
+        current_floor: floor,
+        admission_date: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      await db.collection('patients').insertOne(patient);
+    } else {
+      await db.collection('patients').updateOne(
+        { id: patient.id },
+        { $set: { 
+          status: 'admitted', 
+          current_bed: bed, 
+          current_room: room, 
+          current_floor: floor,
+          admission_date: new Date().toISOString(),
+          csn,
+          updated_at: new Date().toISOString()
+        }}
+      );
+      patient.status = 'admitted';
+      patient.current_bed = bed;
+      patient.current_room = room;
+      patient.current_floor = floor;
+    }
+    
+    // Build HL7 ADT^A01 message
+    const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const msgId = uuidv4().slice(0, 8).toUpperCase();
+    const hl7Message = [
+      `MSH|^~\\&|MSGROUTER|${tenant.name}|RECEIVER|${environment.name}|${timestamp}||ADT^A01|${msgId}|P|2.3`,
+      `EVN|A01|${timestamp}`,
+      `PID|1||${mrn}^^^MRN||${last_name}^${first_name}||${birth_date?.replace(/-/g, '') || ''}|${gender || 'U'}|||||||${language || 'EN'}|||||||||||||${interpreter_needed ? 'Y' : 'N'}`,
+      `PV1|1|I|${floor || ''}^${room || ''}^${bed || ''}||||||||||||||||${csn}|||||||||||||||||||||||||||${timestamp}`
+    ].join('\r');
+    
+    // Build target URL
+    const baseAddress = environment.address.replace(/\/$/, '');
+    let targetUrl;
+    if (baseAddress.includes('://')) {
+      const [protocol, rest] = baseAddress.split('://');
+      const host = rest.includes(':') ? rest.split(':')[0] : rest.split('/')[0];
+      targetUrl = `${protocol}://${host}:${tenant.port}`;
+    } else {
+      targetUrl = `https://${baseAddress}:${tenant.port}`;
+    }
+    
+    // Send message
+    const sendResult = await sendHttpMessage(targetUrl, hl7Message);
+    
+    // Create audit log
+    const auditLog = {
+      id: uuidv4(),
+      user_id: req.user.user_id,
+      user_email: req.user.email,
+      environment_name: environment.name,
+      tenant_name: tenant.name,
+      template_name: 'ADT Admission (A01)',
+      mrn,
+      visit_number: csn,
+      message_sent: hl7Message,
+      target_url: targetUrl,
+      status: sendResult.status,
+      response_code: sendResult.response_code,
+      response_body: sendResult.response_body,
+      operation_type: 'admission',
+      patient_id: patient.id,
+      created_at: new Date().toISOString()
+    };
+    
+    await db.collection('audit_logs').insertOne(auditLog);
+    
+    res.json({
+      status: sendResult.status,
+      patient_id: patient.id,
+      message: hl7Message,
+      target_url: targetUrl,
+      response_code: sendResult.response_code,
+      audit_id: auditLog.id
+    });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// Transfer
+app.post('/api/adt/transfer', authenticate, async (req, res) => {
+  try {
+    const { 
+      environment_id, tenant_id, patient_id, mrn,
+      from_bed, from_room, from_floor,
+      to_bed, to_room, to_floor,
+      location_type // 'room', 'unknown', 'or'
+    } = req.body;
+    
+    const environment = await db.collection('environments').findOne({ id: environment_id }, { projection: { _id: 0 } });
+    if (!environment) return res.status(404).json({ detail: 'Environment not found' });
+    
+    const tenant = await db.collection('tenants').findOne({ id: tenant_id }, { projection: { _id: 0 } });
+    if (!tenant) return res.status(404).json({ detail: 'Tenant not found' });
+    
+    // Get patient
+    let patient;
+    if (patient_id) {
+      patient = await db.collection('patients').findOne({ id: patient_id }, { projection: { _id: 0 } });
+    } else if (mrn) {
+      patient = await db.collection('patients').findOne({ mrn, tenant_id }, { projection: { _id: 0 } });
+    }
+    
+    if (!patient) return res.status(404).json({ detail: 'Patient not found' });
+    
+    // Update patient location
+    await db.collection('patients').updateOne(
+      { id: patient.id },
+      { $set: { 
+        current_bed: to_bed, 
+        current_room: to_room, 
+        current_floor: to_floor,
+        location_type: location_type || 'room',
+        updated_at: new Date().toISOString()
+      }}
+    );
+    
+    // Build HL7 ADT^A02 message
+    const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const msgId = uuidv4().slice(0, 8).toUpperCase();
+    
+    let toLocation = `${to_floor || ''}^${to_room || ''}^${to_bed || ''}`;
+    if (location_type === 'unknown') toLocation = 'UNKNOWN^^';
+    if (location_type === 'or') toLocation = `OR^${to_room || 'OR1'}^`;
+    
+    const hl7Message = [
+      `MSH|^~\\&|MSGROUTER|${tenant.name}|RECEIVER|${environment.name}|${timestamp}||ADT^A02|${msgId}|P|2.3`,
+      `EVN|A02|${timestamp}`,
+      `PID|1||${patient.mrn}^^^MRN||${patient.last_name}^${patient.first_name}`,
+      `PV1|1|I|${toLocation}||||||||||||||||${patient.csn}`,
+      `PV2|||||||||||||||||||||||${from_floor || ''}^${from_room || ''}^${from_bed || ''}`
+    ].join('\r');
+    
+    // Build target URL
+    const baseAddress = environment.address.replace(/\/$/, '');
+    let targetUrl;
+    if (baseAddress.includes('://')) {
+      const [protocol, rest] = baseAddress.split('://');
+      const host = rest.includes(':') ? rest.split(':')[0] : rest.split('/')[0];
+      targetUrl = `${protocol}://${host}:${tenant.port}`;
+    } else {
+      targetUrl = `https://${baseAddress}:${tenant.port}`;
+    }
+    
+    // Send message
+    const sendResult = await sendHttpMessage(targetUrl, hl7Message);
+    
+    // Create audit log
+    const auditLog = {
+      id: uuidv4(),
+      user_id: req.user.user_id,
+      user_email: req.user.email,
+      environment_name: environment.name,
+      tenant_name: tenant.name,
+      template_name: 'ADT Transfer (A02)',
+      mrn: patient.mrn,
+      visit_number: patient.csn,
+      message_sent: hl7Message,
+      target_url: targetUrl,
+      status: sendResult.status,
+      response_code: sendResult.response_code,
+      response_body: sendResult.response_body,
+      operation_type: 'transfer',
+      patient_id: patient.id,
+      created_at: new Date().toISOString()
+    };
+    
+    await db.collection('audit_logs').insertOne(auditLog);
+    
+    res.json({
+      status: sendResult.status,
+      patient_id: patient.id,
+      message: hl7Message,
+      target_url: targetUrl,
+      response_code: sendResult.response_code,
+      audit_id: auditLog.id
+    });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// Discharge
+app.post('/api/adt/discharge', authenticate, async (req, res) => {
+  try {
+    const { 
+      environment_id, tenant_id, patient_id, mrn,
+      discharge_type, // 'immediate', 'scheduled'
+      scheduled_time
+    } = req.body;
+    
+    const environment = await db.collection('environments').findOne({ id: environment_id }, { projection: { _id: 0 } });
+    if (!environment) return res.status(404).json({ detail: 'Environment not found' });
+    
+    const tenant = await db.collection('tenants').findOne({ id: tenant_id }, { projection: { _id: 0 } });
+    if (!tenant) return res.status(404).json({ detail: 'Tenant not found' });
+    
+    // Get patient
+    let patient;
+    if (patient_id) {
+      patient = await db.collection('patients').findOne({ id: patient_id }, { projection: { _id: 0 } });
+    } else if (mrn) {
+      patient = await db.collection('patients').findOne({ mrn, tenant_id }, { projection: { _id: 0 } });
+    }
+    
+    if (!patient) return res.status(404).json({ detail: 'Patient not found' });
+    
+    // If scheduled, create scheduled message instead
+    if (discharge_type === 'scheduled' && scheduled_time) {
+      const scheduledDoc = {
+        id: uuidv4(),
+        user_id: req.user.user_id,
+        user_email: req.user.email,
+        environment_id,
+        environment_name: environment.name,
+        tenant_id,
+        tenant_name: tenant.name,
+        template_id: null,
+        template_name: 'ADT Discharge (A03)',
+        mrn: patient.mrn,
+        visit_number: patient.csn,
+        room: patient.current_room,
+        bed: patient.current_bed,
+        floor: patient.current_floor,
+        message_body: 'SCHEDULED_DISCHARGE',
+        scheduled_at: scheduled_time,
+        status: 'pending',
+        operation_type: 'discharge',
+        patient_id: patient.id,
+        created_at: new Date().toISOString()
+      };
+      
+      await db.collection('scheduled_messages').insertOne(scheduledDoc);
+      
+      return res.json({
+        status: 'scheduled',
+        patient_id: patient.id,
+        scheduled_at: scheduled_time,
+        scheduled_id: scheduledDoc.id
+      });
+    }
+    
+    // Immediate discharge - Update patient status
+    await db.collection('patients').updateOne(
+      { id: patient.id },
+      { $set: { 
+        status: 'discharged',
+        discharge_date: new Date().toISOString(),
+        current_bed: null,
+        current_room: null,
+        current_floor: null,
+        updated_at: new Date().toISOString()
+      }}
+    );
+    
+    // Build HL7 ADT^A03 message
+    const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const msgId = uuidv4().slice(0, 8).toUpperCase();
+    const hl7Message = [
+      `MSH|^~\\&|MSGROUTER|${tenant.name}|RECEIVER|${environment.name}|${timestamp}||ADT^A03|${msgId}|P|2.3`,
+      `EVN|A03|${timestamp}`,
+      `PID|1||${patient.mrn}^^^MRN||${patient.last_name}^${patient.first_name}`,
+      `PV1|1|I|${patient.current_floor || ''}^${patient.current_room || ''}^${patient.current_bed || ''}||||||||||||||||${patient.csn}|||||||||||||||||||||||||||${timestamp}`
+    ].join('\r');
+    
+    // Build target URL
+    const baseAddress = environment.address.replace(/\/$/, '');
+    let targetUrl;
+    if (baseAddress.includes('://')) {
+      const [protocol, rest] = baseAddress.split('://');
+      const host = rest.includes(':') ? rest.split(':')[0] : rest.split('/')[0];
+      targetUrl = `${protocol}://${host}:${tenant.port}`;
+    } else {
+      targetUrl = `https://${baseAddress}:${tenant.port}`;
+    }
+    
+    // Send message
+    const sendResult = await sendHttpMessage(targetUrl, hl7Message);
+    
+    // Create audit log
+    const auditLog = {
+      id: uuidv4(),
+      user_id: req.user.user_id,
+      user_email: req.user.email,
+      environment_name: environment.name,
+      tenant_name: tenant.name,
+      template_name: 'ADT Discharge (A03)',
+      mrn: patient.mrn,
+      visit_number: patient.csn,
+      message_sent: hl7Message,
+      target_url: targetUrl,
+      status: sendResult.status,
+      response_code: sendResult.response_code,
+      response_body: sendResult.response_body,
+      operation_type: 'discharge',
+      patient_id: patient.id,
+      created_at: new Date().toISOString()
+    };
+    
+    await db.collection('audit_logs').insertOne(auditLog);
+    
+    res.json({
+      status: sendResult.status,
+      patient_id: patient.id,
+      message: hl7Message,
+      target_url: targetUrl,
+      response_code: sendResult.response_code,
+      audit_id: auditLog.id
+    });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// Update (Generic - for ORM, ORU, Medications, etc.)
+app.post('/api/adt/update', authenticate, async (req, res) => {
+  try {
+    const { 
+      environment_id, tenant_id, patient_id, mrn,
+      operation_type_id, // References operation_types collection
+      custom_data // Additional data based on operation type
+    } = req.body;
+    
+    const environment = await db.collection('environments').findOne({ id: environment_id }, { projection: { _id: 0 } });
+    if (!environment) return res.status(404).json({ detail: 'Environment not found' });
+    
+    const tenant = await db.collection('tenants').findOne({ id: tenant_id }, { projection: { _id: 0 } });
+    if (!tenant) return res.status(404).json({ detail: 'Tenant not found' });
+    
+    const operationType = await db.collection('operation_types').findOne({ id: operation_type_id }, { projection: { _id: 0 } });
+    if (!operationType) return res.status(404).json({ detail: 'Operation type not found' });
+    
+    // Get patient
+    let patient;
+    if (patient_id) {
+      patient = await db.collection('patients').findOne({ id: patient_id }, { projection: { _id: 0 } });
+    } else if (mrn) {
+      patient = await db.collection('patients').findOne({ mrn, tenant_id }, { projection: { _id: 0 } });
+    }
+    
+    if (!patient) return res.status(404).json({ detail: 'Patient not found' });
+    
+    // Build HL7 message based on operation type
+    const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const msgId = uuidv4().slice(0, 8).toUpperCase();
+    
+    let hl7Message;
+    const eventType = operationType.hl7_event || 'ADT^A08';
+    
+    // Base segments
+    const msh = `MSH|^~\\&|MSGROUTER|${tenant.name}|RECEIVER|${environment.name}|${timestamp}||${eventType}|${msgId}|P|2.3`;
+    const pid = `PID|1||${patient.mrn}^^^MRN||${patient.last_name}^${patient.first_name}||${patient.birth_date?.replace(/-/g, '') || ''}|${patient.gender || 'U'}`;
+    
+    // Build message based on category
+    const segments = [msh];
+    
+    if (eventType.startsWith('ORM')) {
+      segments.push(pid);
+      segments.push(`ORC|NW|${msgId}|||||||${timestamp}`);
+      if (custom_data?.order_code) {
+        segments.push(`OBR|1|${msgId}||${custom_data.order_code}^${custom_data.order_name || ''}|||${timestamp}`);
+      }
+    } else if (eventType.startsWith('ORU')) {
+      segments.push(pid);
+      segments.push(`OBR|1|${msgId}||${custom_data?.test_code || ''}^${custom_data?.test_name || ''}|||${timestamp}`);
+      if (custom_data?.result_value) {
+        segments.push(`OBX|1|NM|${custom_data.test_code || ''}||${custom_data.result_value}|${custom_data.unit || ''}||${custom_data.abnormal_flag || 'N'}|||F`);
+      }
+    } else if (eventType.startsWith('RAS') || operationType.category === 'medications') {
+      segments.push(pid);
+      segments.push(`ORC|RE|${msgId}|||||||${timestamp}`);
+      if (custom_data?.medication_code) {
+        segments.push(`RXA|0|1|${timestamp}|${timestamp}|${custom_data.medication_code}^${custom_data.medication_name || ''}|${custom_data.dose || ''}|${custom_data.unit || ''}||${custom_data.route || ''}`);
+      }
+    } else {
+      // Default ADT^A08 Update
+      segments.push(`EVN|A08|${timestamp}`);
+      segments.push(pid);
+      segments.push(`PV1|1|I|${patient.current_floor || ''}^${patient.current_room || ''}^${patient.current_bed || ''}||||||||||||||||${patient.csn}`);
+    }
+    
+    hl7Message = segments.join('\r');
+    
+    // Build target URL
+    const baseAddress = environment.address.replace(/\/$/, '');
+    let targetUrl;
+    if (baseAddress.includes('://')) {
+      const [protocol, rest] = baseAddress.split('://');
+      const host = rest.includes(':') ? rest.split(':')[0] : rest.split('/')[0];
+      targetUrl = `${protocol}://${host}:${tenant.port}`;
+    } else {
+      targetUrl = `https://${baseAddress}:${tenant.port}`;
+    }
+    
+    // Send message
+    const sendResult = await sendHttpMessage(targetUrl, hl7Message);
+    
+    // Create audit log
+    const auditLog = {
+      id: uuidv4(),
+      user_id: req.user.user_id,
+      user_email: req.user.email,
+      environment_name: environment.name,
+      tenant_name: tenant.name,
+      template_name: `${operationType.name} (${eventType})`,
+      mrn: patient.mrn,
+      visit_number: patient.csn,
+      message_sent: hl7Message,
+      target_url: targetUrl,
+      status: sendResult.status,
+      response_code: sendResult.response_code,
+      response_body: sendResult.response_body,
+      operation_type: operationType.category,
+      operation_type_id: operationType.id,
+      patient_id: patient.id,
+      custom_data,
+      created_at: new Date().toISOString()
+    };
+    
+    await db.collection('audit_logs').insertOne(auditLog);
+    
+    res.json({
+      status: sendResult.status,
+      patient_id: patient.id,
+      message: hl7Message,
+      target_url: targetUrl,
+      response_code: sendResult.response_code,
+      audit_id: auditLog.id
+    });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// Seed default operation types
+app.post('/api/seed-operation-types', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const existing = await db.collection('operation_types').countDocuments({});
+    if (existing > 0) {
+      return res.json({ message: 'Operation types already seeded', count: existing });
+    }
+    
+    const defaultTypes = [
+      { name: 'ORM Order', category: 'update', hl7_event: 'ORM^O01', description: 'Order Request Message', order: 1 },
+      { name: 'ORU Result', category: 'update', hl7_event: 'ORU^R01', description: 'Observation Result', order: 2 },
+      { name: 'Medication Administration', category: 'medications', hl7_event: 'RAS^O17', description: 'Pharmacy/Treatment Administration', order: 3 },
+      { name: 'Observations', category: 'update', hl7_event: 'ORU^R01', description: 'Clinical Observations', order: 4 },
+      { name: 'Conditions', category: 'update', hl7_event: 'ADT^A08', description: 'Patient Conditions Update', order: 5 },
+      { name: 'Patient Update', category: 'update', hl7_event: 'ADT^A08', description: 'General Patient Information Update', order: 6 },
+    ];
+    
+    const docs = defaultTypes.map(t => ({
+      id: uuidv4(),
+      ...t,
+      fields: [],
+      created_at: new Date().toISOString()
+    }));
+    
+    await db.collection('operation_types').insertMany(docs);
+    res.json({ message: 'Operation types seeded', count: docs.length });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
 // Root endpoint
 app.get('/api/', (req, res) => {
   res.json({ message: 'MsgRouter Platform API - Node.js' });
