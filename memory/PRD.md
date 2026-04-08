@@ -45,6 +45,42 @@ Build an enterprise HL7 message routing platform with:
 - [x] Responsive sidebar navigation
 - [x] Toast notifications with Sonner
 
+### Phase 4 (Apr 8, 2026)
+- [x] **ADT Operations Tab** - Patient Lifecycle Management
+  - New "ADT Operations" page with 4-step wizard:
+    1. Environment Selection (dropdown with all environments)
+    2. Tenant/Company Selection (list of tenants in selected environment)
+    3. Operation Selection (Admission, Update, Transfer, Discharge)
+    4. Details Form (operation-specific fields)
+  - **Admission (ADT^A01)**:
+    - MRN, CSN (Visit Number)
+    - Patient Information: First/Last Name, DOB, Gender, Language, Interpreter Needed
+    - Bed Definition: Floor, Room, Bed
+  - **Update (Configurable)**:
+    - Select patient from admitted patients list
+    - Operation types: ORM Orders, ORU Results, Medications, Observations, Conditions
+    - Dynamic fields based on operation type
+  - **Transfer (ADT^A02)**:
+    - Patient selection with search
+    - Current location display (from)
+    - Target location: Regular Room, Operating Room (OR), Unknown Location
+    - Bed definition fields for target
+  - **Discharge (ADT^A03)**:
+    - Patient selection with search
+    - Immediate discharge (instant HL7 message)
+    - Scheduled discharge (creates scheduled message)
+  - **Admin-Configurable Operation Types**:
+    - Settings modal "Operations" tab
+    - CRUD for operation types
+    - Fields: Name, Category, HL7 Event Type, Description
+    - 6 default types seeded (ORM Order, ORU Result, Medication Administration, etc.)
+  - **Patient Storage**:
+    - Patients stored in MongoDB `patients` collection
+    - HL7 messages sent to configured endpoints
+    - Full audit trail for all operations
+  - 22/22 backend tests passing
+  - 16/16 frontend tests passing
+
 ### Phase 3 (Apr 2, 2026)
 - [x] **Complete Backend Rewrite from Python to Node.js**
   - Migrated all API routes from FastAPI to Express.js
@@ -120,6 +156,8 @@ Build an enterprise HL7 message routing platform with:
 - [x] Message scheduling/queue
 - [x] Dashboard analytics charts
 - [x] Message retry functionality
+- [x] ADT Operations tab with patient lifecycle management
+- [x] Admin-configurable operation types
 
 ### P2 (Medium Priority) - Next
 - [ ] Export audit logs to CSV
